@@ -2,8 +2,6 @@ package utils
 
 import (
 	"math/rand"
-	"net"
-	"net/http"
 	"regexp"
 	"time"
 )
@@ -27,15 +25,9 @@ func MakeShortURL(length int) string {
 	return str
 }
 
-// IsValidURL Проверка переданного URL на валидность.
+// IsValidURL Проверка переданного URL на валидность (URL не пустой и соответствует требованиям к URL).
 func IsValidURL(longURL string) bool {
 	pattern := `^https?://([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(/[^\s]*)?$`
 	matched, _ := regexp.MatchString(pattern, longURL)
 	return matched
-}
-
-// GetHostAndPort Получение хоста и порта.
-func GetHostAndPort(w http.ResponseWriter, r *http.Request) (string, string) {
-	host, port, _ := net.SplitHostPort(r.Host)
-	return host, port
 }
