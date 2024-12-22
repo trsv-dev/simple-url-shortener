@@ -7,18 +7,24 @@ import (
 	"strings"
 
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/storage"
-	"github.com/trsv-dev/simple-url-shortener/internal/shortener/utils"
 )
 
 // PostHandler Функция обработки запроса к "/".
 func PostHandler(storage storage.Storage, w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		w.WriteHeader(http.StatusMethodNotAllowed)
+		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+
+	if r.URL.Path != "/" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	defer r.Body.Close()
 	rawURL, err := io.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, "Ошибка чтения тела запроса", http.StatusInternalServerError)
+		http.Error(w, "ошибка чтения тела запроса", http.StatusInternalServerError)
 		return
 	}
 
@@ -29,8 +35,7 @@ func PostHandler(storage storage.Storage, w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	host, port := utils.GetHostAndPort(w, r)
-	answer := fmt.Sprintf("http://%s:%s/%s", host, port, shortURL)
+	answer := fmt.Sprintf("http://%s/%s", r.Host, shortURL)
 
 	w.WriteHeader(http.StatusCreated)
 	w.Write([]byte(answer))
@@ -39,7 +44,7 @@ func PostHandler(storage storage.Storage, w http.ResponseWriter, r *http.Request
 // GetHandler Функция обработки запроса к "/{id}".
 func GetHandler(storage storage.Storage, w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		w.WriteHeader(http.StatusMethodNotAllowed)
+		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
