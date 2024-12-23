@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"io"
@@ -10,10 +11,6 @@ import (
 	"testing"
 )
 
-type MockStorage struct {
-	mockData map[string]string
-}
-
 // Структура, которая имитирует ошибку при чтении. Когда обработчик получает её,
 // он должен корректно обрабатывать ситуацию, которая приводит к внутренней ошибке сервера.
 type ErrorReader struct{}
@@ -22,9 +19,14 @@ func (e *ErrorReader) Read(p []byte) (n int, err error) {
 	return 0, fmt.Errorf("mock read error")
 }
 
+// Структура, которая имитирует работу хранилища URL.
+type MockStorage struct {
+	mockData map[string]string
+}
+
 func (ms *MockStorage) SetInStorage(longURL string) (string, error) {
 	if longURL == "https://invalid-example.com" || longURL == "" {
-		return "", fmt.Errorf("передан невалидный url")
+		return "", errors.New("передан невалидный url")
 	}
 	return ms.mockData[longURL], nil
 }
