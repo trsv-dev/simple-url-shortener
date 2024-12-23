@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"errors"
 	"math/rand"
 	"regexp"
 	"time"
@@ -17,12 +18,15 @@ func init() {
 }
 
 // MakeShortURL Создание рандомной строки заданной длины из константного набора символов.
-func MakeShortURL(length int) string {
+func MakeShortURL(length int) (string, error) {
+	if length < 5 {
+		return "", errors.New("переданная длина слишком мала для генерации URL")
+	}
 	var str string
 	for i := 0; i < length; i++ {
 		str += string(latin[random.Intn(len(latin))])
 	}
-	return str
+	return str, nil
 }
 
 // IsValidURL Проверка переданного URL на валидность (URL не пустой и соответствует требованиям к URL).

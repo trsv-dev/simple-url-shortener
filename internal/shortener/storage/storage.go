@@ -47,11 +47,15 @@ func (u *URLStorage) SetInStorage(longURL string) (string, error) {
 		}
 
 		var shortURL string
+		var err error
 		// Проверяем уникальность сгенерированного короткого URL.
 		// Если короткий URL существует, цикл повторяется для генерации нового.
 		for {
-			shortURL = utils.MakeShortURL(length)
-			if _, err := u.GetFromStorage(shortURL); err == nil {
+			shortURL, err = utils.MakeShortURL(length)
+			if err != nil {
+				return "", fmt.Errorf("ошибка при генерации короткого URL: %v", err)
+			}
+			if _, err = u.GetFromStorage(shortURL); err == nil {
 				continue
 			}
 			break
