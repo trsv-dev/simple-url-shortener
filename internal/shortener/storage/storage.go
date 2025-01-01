@@ -65,7 +65,7 @@ func (u *URLStorage) SetInStorage(longURL string) (string, error) {
 
 		return u.longToShort[longURL], nil
 	}
-	return "", fmt.Errorf("передан невалидный url")
+	return "", fmt.Errorf("передан невалидный URL")
 }
 
 // GetFromStorage Поиск и возврат найденного длинного URL по переданному короткому URL.

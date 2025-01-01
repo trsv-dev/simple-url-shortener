@@ -7,8 +7,7 @@ import (
 	"time"
 )
 
-const latin = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890"
-
+var latin = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890"
 var random *rand.Rand
 
 // Инициализируем структуру для хранения мап соответствия адресов.

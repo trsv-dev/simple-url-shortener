@@ -11,16 +11,15 @@ func TestInitStorage(t *testing.T) {
 		longToShort: make(map[string]string),
 		shortToLong: make(map[string]string),
 	}
-	mockData := []struct {
+	testTable := []struct {
 		name            string
 		expectedStorage *URLStorage
 	}{
 		{name: "Init Storage", expectedStorage: mockStorage},
 	}
 
-	for _, tt := range mockData {
+	for _, tt := range testTable {
 		t.Run(tt.name, func(t *testing.T) {
-
 			actualStorage := InitStorage()
 			assert.NotNil(t, actualStorage, "Хранилище не должно быть nil")
 			assert.Equal(t, mockStorage, actualStorage)
@@ -29,7 +28,7 @@ func TestInitStorage(t *testing.T) {
 }
 
 func TestURLStorage_SetInStorage(t *testing.T) {
-	mockData := []struct {
+	testTable := []struct {
 		name      string
 		longURL   string
 		wantError bool
@@ -40,7 +39,7 @@ func TestURLStorage_SetInStorage(t *testing.T) {
 		{name: "Invalid URL", longURL: "https://example", wantError: true},
 	}
 
-	for _, tt := range mockData {
+	for _, tt := range testTable {
 		t.Run(tt.name, func(t *testing.T) {
 			storage := InitStorage()
 
@@ -63,26 +62,26 @@ func TestURLStorage_SetInStorage(t *testing.T) {
 }
 
 func TestURLStorage_GetFromStorage(t *testing.T) {
-	mockData := []struct {
-		name      string
-		longURL   string
-		shortURL  string
-		wantError bool
+	testTable := []struct {
+		name          string
+		longURL       string
+		shortURL      string
+		expectedError bool
 	}{
-		{name: "Get URL by valid shortURL", longURL: "https://example.com", wantError: false},
-		{name: "Get URL by invalid shortURL", shortURL: "shortURL", wantError: true},
+		{name: "Get URL by valid shortURL", longURL: "https://example.com", expectedError: false},
+		{name: "Get URL by invalid shortURL", shortURL: "shortURL", expectedError: true},
 	}
 
-	for _, tt := range mockData {
+	for _, tt := range testTable {
 		storage := InitStorage()
 
-		if tt.wantError {
+		if tt.expectedError {
 			longURL, err := storage.GetFromStorage(tt.shortURL)
 			assert.Error(t, err, "Ожидалась ошибка для несуществующего shortURL")
 			assert.Empty(t, longURL)
 		}
 
-		if !tt.wantError {
+		if !tt.expectedError {
 			shortURL, err := storage.SetInStorage(tt.longURL)
 			assert.NoError(t, err, "Ошибка при добавлении URL в хранилище")
 			assert.NotEmpty(t, shortURL, "Короткий URL не должен быть пустым")
