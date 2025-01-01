@@ -6,7 +6,7 @@ import (
 )
 
 func TestIsValidURL(t *testing.T) {
-	mockData := []struct {
+	testTable := []struct {
 		name           string
 		longURL        string
 		expectedAnswer bool
@@ -19,7 +19,7 @@ func TestIsValidURL(t *testing.T) {
 		{name: "Valid URL. With subdomain", longURL: "http://subdomain.example.com/path", expectedAnswer: true},
 	}
 
-	for _, tt := range mockData {
+	for _, tt := range testTable {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.expectedAnswer, IsValidURL(tt.longURL))
 		})
@@ -27,7 +27,7 @@ func TestIsValidURL(t *testing.T) {
 }
 
 func TestMakeShortURL(t *testing.T) {
-	mockData := []struct {
+	testTable := []struct {
 		name          string
 		length        int
 		wantError     bool
@@ -37,7 +37,7 @@ func TestMakeShortURL(t *testing.T) {
 		{name: "Generate URL small length", length: 4, wantError: true, expectedError: "переданная длина слишком мала для генерации URL"},
 	}
 
-	for _, tt := range mockData {
+	for _, tt := range testTable {
 		t.Run(tt.name, func(t *testing.T) {
 			generated, err := MakeShortURL(tt.length)
 			if tt.wantError {
