@@ -2,13 +2,12 @@ package handlers
 
 import (
 	"fmt"
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/config"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/storage"
 	"io"
 	"net/http"
 	"strings"
 )
-
-const serverHost = "127.0.0.1:8080"
 
 // PostHandler Функция обработки запроса к "/".
 func PostHandler(storage storage.Storage, w http.ResponseWriter, r *http.Request) {
@@ -35,7 +34,8 @@ func PostHandler(storage storage.Storage, w http.ResponseWriter, r *http.Request
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	answer := fmt.Sprintf("http://%s/%s", serverHost, shortURL)
+	baseURL := config.GetServerConfig().BaseURL
+	answer := fmt.Sprint(baseURL + "/" + shortURL)
 
 	w.WriteHeader(http.StatusCreated)
 	w.Write([]byte(answer))
