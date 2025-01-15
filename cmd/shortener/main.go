@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/config"
 	"net/http"
 
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/router"
@@ -15,7 +16,10 @@ func main() {
 
 // RunServer Запуск сервера.
 func RunServer() error {
+	cfg := config.InitConfig()
+
 	URLs := storage.InitStorage()
 	mux := router.Router(URLs)
-	return http.ListenAndServe(":8080", mux)
+
+	return http.ListenAndServe(cfg.ServerAddress, mux)
 }

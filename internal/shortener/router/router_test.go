@@ -122,8 +122,6 @@ func TestRouterIntegration(t *testing.T) {
 			require.NoError(t, err)
 			defer response.Body.Close()
 
-			fmt.Println(mockStorage)
-
 			if tt.method == http.MethodGet && tt.expectedStatusCode == http.StatusTemporaryRedirect {
 				assert.Equal(t, tt.want, response.Header.Get("Location"))
 			}
