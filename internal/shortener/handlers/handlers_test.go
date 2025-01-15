@@ -82,7 +82,6 @@ func TestPostHandler(t *testing.T) {
 	mockStorage := &MockStorage{
 		mockData: map[string]string{"https://example.com": "ShortURL"},
 	}
-
 	testTable := []struct {
 		name           string
 		requestMethod  string
@@ -93,7 +92,7 @@ func TestPostHandler(t *testing.T) {
 	}{
 		{name: "Invalid longURL", requestMethod: http.MethodPost, longURL: "https://invalid-example.com", URL: "/", expectedBody: "", expectedStatus: http.StatusBadRequest},
 		{name: "Empty longURL", requestMethod: http.MethodPost, longURL: "", URL: "/", expectedBody: "", expectedStatus: http.StatusBadRequest},
-		{name: "Valid longURL", requestMethod: http.MethodPost, longURL: "https://example.com", URL: "/", expectedBody: fmt.Sprintf("http://%v/ShortURL", serverHost), expectedStatus: http.StatusCreated},
+		{name: "Valid longURL", requestMethod: http.MethodPost, longURL: "https://example.com", URL: "/", expectedBody: "http://localhost:8080/ShortURL", expectedStatus: http.StatusCreated},
 		{name: "Valid longURL with invalid URL", requestMethod: http.MethodPost, longURL: "https://example.com", URL: "/invalid", expectedStatus: http.StatusBadRequest},
 		{name: "Valid longURL and wrong method (GET)", requestMethod: http.MethodGet, longURL: "https://example.com", URL: "/", expectedStatus: http.StatusBadRequest},
 		{name: "Valid longURL and wrong method (PUT)", requestMethod: http.MethodPut, longURL: "https://example.com", URL: "/", expectedStatus: http.StatusBadRequest},
@@ -103,7 +102,6 @@ func TestPostHandler(t *testing.T) {
 
 	for _, tt := range testTable {
 		t.Run(tt.name, func(t *testing.T) {
-
 			// Если в тесте надо проверить 500 ошибку, то подсовываем тело с ошибкой.
 			var body io.Reader
 			if tt.expectedStatus == http.StatusInternalServerError {
