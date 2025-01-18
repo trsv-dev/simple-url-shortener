@@ -3,8 +3,10 @@ package config
 import (
 	"flag"
 	"log"
+	"os"
 )
 
+// Config Структура для хранения данных о конфигурации сервера.
 type Config struct {
 	ServerAddress string
 	BaseURL       string
@@ -18,15 +20,25 @@ var ServerConfig *Config
 // (либо конфигурацию по умолчанию).
 func InitConfig() *Config {
 	config := &Config{}
-
 	flag.StringVar(&config.ServerAddress, "a", "localhost:8080", "HTTP server address")
 	flag.StringVar(&config.BaseURL, "b", "http://localhost:8080", "Base URL for shortened links")
 
 	flag.Parse()
 
+	OverrideFromEnv(&config.ServerAddress, "SERVER_ADDRESS")
+	OverrideFromEnv(&config.BaseURL, "BASE_URL")
+
 	ServerConfig = config
 
 	return config
+}
+
+// OverrideFromEnv Если заданы переменные окружения и они не пустые - функция пытается
+// переписать поля структуры данными, полученными из переменных окружения.
+func OverrideFromEnv(structFiled *string, envKey string) {
+	if value, ok := os.LookupEnv(envKey); ok && value != "" {
+		*structFiled = value
+	}
 }
 
 // GetServerConfig Функция получения инициализированной конфигурации.
