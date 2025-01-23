@@ -49,7 +49,7 @@ func TestGetServerConfig(t *testing.T) {
 		{
 			name:                 "Not initialized config struct",
 			serverConfig:         nil,
-			expectedServerConfig: &Config{ServerAddress: "localhost:8080", BaseURL: "http://localhost:8080"},
+			expectedServerConfig: &Config{ServerAddress: "localhost:8080", BaseURL: "http://localhost:8080", Logging: true, LogLevel: "Info"},
 		},
 	}
 
@@ -74,23 +74,35 @@ func TestOverrideFromEnv(t *testing.T) {
 		envValue1            string
 		envKey2              string
 		envValue2            string
+		envKey3              string
+		envValue3            string
+		envKey4              string
+		envValue4            string
 	}{
 		{
 			name:                 "Override server address and base url config fields given from default config to environment values",
-			expectedServerConfig: &Config{ServerAddress: "host-from-env:8002", BaseURL: "http://address-from-env:8002"},
+			expectedServerConfig: &Config{ServerAddress: "host-from-env:8002", BaseURL: "http://address-from-env:8002", Logging: true, LogLevel: "Debug"},
 			envKey1:              "SERVER_ADDRESS",
 			envValue1:            "host-from-env:8002",
 			envKey2:              "BASE_URL",
 			envValue2:            "http://address-from-env:8002",
+			envKey3:              "LOGGING",
+			envValue3:            "True",
+			envKey4:              "LOG_LEVEL",
+			envValue4:            "Debug",
 		},
 		{
 			name:                 "Override server address and base url config fields given from flags to environment values",
-			serverConfig:         &Config{ServerAddress: "host-from-flags:8001", BaseURL: "http://address-from-flags:8001"},
-			expectedServerConfig: &Config{ServerAddress: "host-from-env:8002", BaseURL: "http://address-from-env:8002"},
+			serverConfig:         &Config{ServerAddress: "host-from-flags:8001", BaseURL: "http://address-from-flags:8001", Logging: false, LogLevel: "Info"},
+			expectedServerConfig: &Config{ServerAddress: "host-from-env:8002", BaseURL: "http://address-from-env:8002", Logging: true, LogLevel: "Debug"},
 			envKey1:              "SERVER_ADDRESS",
 			envValue1:            "host-from-env:8002",
 			envKey2:              "BASE_URL",
 			envValue2:            "http://address-from-env:8002",
+			envKey3:              "LOGGING",
+			envValue3:            "True",
+			envKey4:              "LOG_LEVEL",
+			envValue4:            "Debug",
 		},
 	}
 
@@ -101,8 +113,12 @@ func TestOverrideFromEnv(t *testing.T) {
 			if tt.envKey1 != "" && tt.envKey2 != "" {
 				os.Setenv(tt.envKey1, tt.envValue1)
 				os.Setenv(tt.envKey2, tt.envValue2)
+				os.Setenv(tt.envKey3, tt.envValue3)
+				os.Setenv(tt.envKey4, tt.envValue4)
 				defer os.Unsetenv(tt.envKey1)
 				defer os.Unsetenv(tt.envKey2)
+				defer os.Unsetenv(tt.envKey3)
+				defer os.Unsetenv(tt.envKey4)
 			}
 
 			if tt.serverConfig != nil {
@@ -113,5 +129,23 @@ func TestOverrideFromEnv(t *testing.T) {
 
 			assert.Equal(t, tt.expectedServerConfig, ServerConfig)
 		})
+	}
+}
+
+func TestOverrideFromEnvUnsupportedType(t *testing.T) {
+	var unsupportedType float64
+	envKey := "UNSUPPORTED_TYPE"
+	envValue := "1.23456789"
+
+	os.Setenv(envKey, envValue)
+	defer os.Unsetenv(envKey)
+
+	// Вызываем OverrideFromEnv с неподдерживаемым типом;
+	// переменная unsupportedType не должна перезаписаться
+	OverrideFromEnv(&unsupportedType, envKey)
+
+	// Проверяем, что значение переменной не изменилось
+	if unsupportedType != 0 {
+		t.Errorf("Expected unsupportedType to remain 0, got %v", unsupportedType)
 	}
 }
