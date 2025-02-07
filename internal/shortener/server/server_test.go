@@ -22,8 +22,9 @@ func TestRunServer(t *testing.T) {
 
 	// Пробуем отправить простой запрос, чтобы убедиться, что сервер работает
 	resp, err := http.Get("http://127.0.0.1:8080")
-	defer resp.Body.Close()
 	assert.NoError(t, err)
+	defer resp.Body.Close()
+
 	assert.Equal(t, http.StatusMethodNotAllowed, resp.StatusCode)
 
 	// Завершаем сервер
