@@ -19,6 +19,7 @@ type Storage interface {
 	GetFromStorage(shortURL string) (string, error)
 }
 
+// InitStorage Инициализация хранилища
 func InitStorage() *URLStorage {
 	URLs := URLStorage{
 		id:          0,
