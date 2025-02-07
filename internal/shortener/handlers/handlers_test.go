@@ -28,6 +28,11 @@ func (ms *MockStorage) SetInStorage(longURL string) (string, error) {
 	if longURL == "https://invalid-example.com" || longURL == "" {
 		return "", errors.New("передан невалидный URL")
 	}
+
+	if longURL == "123" {
+		return "", fmt.Errorf("ошибка при сохранении URL: %v", http.StatusInternalServerError)
+	}
+
 	return ms.mockData[longURL], nil
 }
 
@@ -41,8 +46,9 @@ func (ms *MockStorage) GetFromStorage(shortURL string) (string, error) {
 }
 
 func TestGetHandler(t *testing.T) {
+	// для Get хендлера передаем структуру в виде "короткая ссылка: длинная ссылка"
 	mockStorage := &MockStorage{
-		mockData: map[string]string{"ShortURL": "https://example.com"},
+		mockData: map[string]string{"shortURL": "https://example.com"},
 	}
 
 	testTable := []struct {
@@ -54,10 +60,10 @@ func TestGetHandler(t *testing.T) {
 	}{
 		{name: "Invalid (empty) shortURL", requestMethod: http.MethodGet, shortURL: "/", expectedStatus: http.StatusBadRequest},
 		{name: "Invalid (bad) shortURL", requestMethod: http.MethodGet, shortURL: "/badShortUrl", expectedStatus: http.StatusBadRequest},
-		{name: "Valid shortURL", requestMethod: http.MethodGet, shortURL: "/ShortURL", expectedStatus: http.StatusTemporaryRedirect, expectedLocation: "https://example.com"},
-		{name: "Invalid Method (POST) with valid shortURL", requestMethod: http.MethodPost, shortURL: "/ShortURL", expectedStatus: http.StatusBadRequest},
-		{name: "Invalid Method (DELETE) with valid shortURL", requestMethod: http.MethodDelete, shortURL: "/ShortURL", expectedStatus: http.StatusBadRequest},
-		{name: "Invalid Method (DELETE) with valid shortURL", requestMethod: http.MethodPut, shortURL: "/ShortURL", expectedStatus: http.StatusBadRequest},
+		{name: "Valid shortURL", requestMethod: http.MethodGet, shortURL: "/shortURL", expectedStatus: http.StatusTemporaryRedirect, expectedLocation: "https://example.com"},
+		{name: "Invalid Method (POST) with valid shortURL", requestMethod: http.MethodPost, shortURL: "/shortURL", expectedStatus: http.StatusBadRequest},
+		{name: "Invalid Method (DELETE) with valid shortURL", requestMethod: http.MethodDelete, shortURL: "/shortURL", expectedStatus: http.StatusBadRequest},
+		{name: "Invalid Method (DELETE) with valid shortURL", requestMethod: http.MethodPut, shortURL: "/shortURL", expectedStatus: http.StatusBadRequest},
 	}
 
 	for _, tt := range testTable {
@@ -65,7 +71,9 @@ func TestGetHandler(t *testing.T) {
 			r := httptest.NewRequest(tt.requestMethod, tt.shortURL, nil)
 			w := httptest.NewRecorder()
 
-			GetHandler(mockStorage, w, r)
+			h := NewAppHandler(mockStorage)
+			h.GetHandler(w, r)
+
 			res := w.Result()
 			defer res.Body.Close()
 
@@ -79,9 +87,11 @@ func TestGetHandler(t *testing.T) {
 }
 
 func TestPostHandler(t *testing.T) {
+	// для Post хендлера передаем структуру в виде "длинная ссылка: короткая ссылка"
 	mockStorage := &MockStorage{
-		mockData: map[string]string{"https://example.com": "ShortURL"},
+		mockData: map[string]string{"https://example.com": "shortURL"},
 	}
+
 	testTable := []struct {
 		name           string
 		requestMethod  string
@@ -92,7 +102,7 @@ func TestPostHandler(t *testing.T) {
 	}{
 		{name: "Invalid longURL", requestMethod: http.MethodPost, longURL: "https://invalid-example.com", URL: "/", expectedBody: "", expectedStatus: http.StatusBadRequest},
 		{name: "Empty longURL", requestMethod: http.MethodPost, longURL: "", URL: "/", expectedBody: "", expectedStatus: http.StatusBadRequest},
-		{name: "Valid longURL", requestMethod: http.MethodPost, longURL: "https://example.com", URL: "/", expectedBody: "http://localhost:8080/ShortURL", expectedStatus: http.StatusCreated},
+		{name: "Valid longURL", requestMethod: http.MethodPost, longURL: "https://example.com", URL: "/", expectedBody: "http://localhost:8080/shortURL", expectedStatus: http.StatusCreated},
 		{name: "Valid longURL with invalid URL", requestMethod: http.MethodPost, longURL: "https://example.com", URL: "/invalid", expectedStatus: http.StatusBadRequest},
 		{name: "Valid longURL and wrong method (GET)", requestMethod: http.MethodGet, longURL: "https://example.com", URL: "/", expectedStatus: http.StatusBadRequest},
 		{name: "Valid longURL and wrong method (PUT)", requestMethod: http.MethodPut, longURL: "https://example.com", URL: "/", expectedStatus: http.StatusBadRequest},
@@ -114,13 +124,71 @@ func TestPostHandler(t *testing.T) {
 			r := httptest.NewRequest(tt.requestMethod, tt.URL, body)
 			w := httptest.NewRecorder()
 
-			PostHandler(mockStorage, w, r)
+			h := NewAppHandler(mockStorage)
+			h.PostHandler(w, r)
 			res := w.Result()
 			defer res.Body.Close()
 
 			assert.Equal(t, tt.expectedStatus, res.StatusCode)
 			if tt.expectedBody != "" {
 				assert.Equal(t, tt.expectedBody, w.Body.String())
+			}
+		})
+	}
+}
+
+func TestAPIShorten(t *testing.T) {
+	// для APIShorten хендлера передаем структуру в виде "длинная ссылка: короткая ссылка"
+	mockStorage := &MockStorage{
+		mockData: map[string]string{"https://example.com": "shortURL"},
+	}
+
+	testTable := []struct {
+		name                string
+		requestMethod       string
+		URL                 string
+		requestBody         string
+		expectedStatus      int
+		expectedBody        string
+		expectedContentType string
+	}{
+		{name: "Valid longURL in JSON", requestMethod: http.MethodPost, URL: "/api/shorten", requestBody: `{"url": "https://example.com"}`, expectedStatus: http.StatusCreated, expectedBody: `{"result":"http://localhost:8080/shortURL"}`, expectedContentType: "application/json"},
+		{name: "Invalid longURL in JSON", requestMethod: http.MethodPost, URL: "/api/shorten", requestBody: `{"url": "https://invalid-example.com"}`, expectedStatus: http.StatusBadRequest},
+		{name: "Invalid body in JSON", requestMethod: http.MethodPost, URL: "/api/shorten", requestBody: "", expectedStatus: http.StatusInternalServerError},
+		{name: "Not URL in JSON", requestMethod: http.MethodPost, URL: "/api/shorten", requestBody: `{"url": "123"}`, expectedStatus: http.StatusInternalServerError},
+		{name: "Invalid JSON", requestMethod: http.MethodPost, URL: "/api/shorten", requestBody: `{"url": "https://invalid-example.com"`, expectedStatus: http.StatusBadRequest},
+		{name: "Valid longURL in JSON and wrong method (GET)", requestMethod: http.MethodGet, URL: "/api/shorten", requestBody: `{"url": "https://example.com"}`, expectedStatus: http.StatusMethodNotAllowed},
+		{name: "Valid longURL in JSON and wrong method (PUT)", requestMethod: http.MethodPut, URL: "/api/shorten", requestBody: `{"url": "https://example.com"}`, expectedStatus: http.StatusMethodNotAllowed},
+		{name: "Valid longURL in JSON and wrong method (DELETE)", requestMethod: http.MethodDelete, URL: "/api/shorten", requestBody: `{"url": "https://example.com"}`, expectedStatus: http.StatusMethodNotAllowed},
+	}
+
+	for _, tt := range testTable {
+		t.Run(tt.name, func(t *testing.T) {
+
+			// Если в тесте надо проверить 500 ошибку, то подсовываем тело с ошибкой.
+			var body io.Reader
+			if tt.expectedStatus == http.StatusInternalServerError && tt.requestBody == "" {
+				body = &ErrorReader{}
+				// Для всех других тестов создаем нормальное тело запроса.
+			} else {
+				body = strings.NewReader(tt.requestBody)
+			}
+
+			r := httptest.NewRequest(tt.requestMethod, tt.URL, body)
+			w := httptest.NewRecorder()
+
+			h := NewAppHandler(mockStorage)
+			h.APIShorten(w, r)
+			res := w.Result()
+			defer res.Body.Close()
+
+			assert.Equal(t, tt.expectedStatus, res.StatusCode)
+			if tt.expectedBody != "" {
+				assert.JSONEq(t, tt.expectedBody, w.Body.String())
+			}
+
+			if tt.expectedContentType != "" {
+				assert.Equal(t, tt.expectedContentType, res.Header.Get("Content-Type"))
 			}
 		})
 	}

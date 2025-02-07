@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/config"
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/handlers"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -21,7 +23,11 @@ func (ms *MockStorage) SetInStorage(longURL string) (string, error) {
 	if longURL == "https://invalid-example.com" || longURL == "" {
 		return "", errors.New("передан невалидный URL")
 	}
-	return ms.mockData[longURL], nil
+
+	shortURL := "shortURL"
+	ms.mockData[shortURL] = longURL
+
+	return shortURL, nil
 }
 
 func (ms *MockStorage) GetFromStorage(shortURL string) (string, error) {
@@ -68,7 +74,9 @@ func TestRouter(t *testing.T) {
 		mockStorage := &MockStorage{
 			mockData: map[string]string{"shortURL": "https://example.com"},
 		}
-		mux := Router(mockStorage)
+
+		h := handlers.NewAppHandler(mockStorage)
+		mux := Router(h)
 
 		t.Run(tt.name, func(t *testing.T) {
 			var body io.Reader
@@ -91,24 +99,26 @@ func TestRouterIntegration(t *testing.T) {
 		want               string
 		expectedStatusCode int
 	}{
-		{name: "Get shortURL from longURL", URL: "/", method: http.MethodPost, longURL: "https://example.com", want: "shortURL", expectedStatusCode: http.StatusCreated},
-		{name: "Get longURL from shortURL", URL: "/shortURL", method: http.MethodGet, want: "https://example.com", expectedStatusCode: http.StatusTemporaryRedirect},
-		{name: "Invalid shortURL", URL: "/invalid", method: http.MethodGet, expectedStatusCode: http.StatusBadRequest},
+		{name: "Get shortURL from longURL", URL: "", method: http.MethodPost, longURL: "https://example.com", want: "shortURL", expectedStatusCode: http.StatusCreated},
+		{name: "Get longURL from shortURL (string)", URL: "shortURL", method: http.MethodGet, want: "https://example.com", expectedStatusCode: http.StatusTemporaryRedirect},
+		{name: "Get longURL from shortURL (json)", URL: "api/shorten", method: http.MethodPost, longURL: `{"url": "https://example.com"}`, want: `{"result":"http://localhost:8080/shortURL"}`, expectedStatusCode: http.StatusCreated},
+		{name: "Invalid shortURL", URL: "invalid", method: http.MethodGet, expectedStatusCode: http.StatusBadRequest},
 		{name: "Bad path", URL: "/bad/path", method: http.MethodGet, expectedStatusCode: http.StatusNotFound},
-		{name: "Invalid longURL", URL: "/", method: http.MethodPost, longURL: "https://invalid-example.com", expectedStatusCode: http.StatusBadRequest},
+		{name: "Invalid longURL (string)", URL: "", method: http.MethodPost, longURL: "https://invalid-example.com", expectedStatusCode: http.StatusBadRequest},
+		{name: "Invalid longURL (json)", URL: "api/shorten", method: http.MethodPost, longURL: `{"url": "https://invalid-example.com"}`, expectedStatusCode: http.StatusBadRequest},
 	}
 
 	mockStorage := &MockStorage{
 		mockData: map[string]string{"shortURL": "https://example.com"},
 	}
 
-	testServer := httptest.NewServer(Router(mockStorage))
+	h := handlers.NewAppHandler(mockStorage)
+	testServer := httptest.NewServer(Router(h))
 	defer testServer.Close()
 
 	for _, tt := range testTable {
 		t.Run(tt.name, func(t *testing.T) {
-
-			request, err := http.NewRequest(tt.method, testServer.URL+tt.URL, strings.NewReader(tt.longURL))
+			request, err := http.NewRequest(tt.method, testServer.URL+"/"+tt.URL, strings.NewReader(tt.longURL))
 			require.NoError(t, err)
 
 			client := testServer.Client()
@@ -124,7 +134,16 @@ func TestRouterIntegration(t *testing.T) {
 
 			if tt.method == http.MethodGet && tt.expectedStatusCode == http.StatusTemporaryRedirect {
 				assert.Equal(t, tt.want, response.Header.Get("Location"))
+				return
 			}
+
+			if len(tt.want) > 0 {
+				body, err := io.ReadAll(response.Body)
+				require.NoError(t, err)
+				assert.Equal(t, tt.want, strings.TrimPrefix(string(body), config.GetServerConfig().BaseURL+"/"))
+				return
+			}
+
 			assert.Equal(t, tt.expectedStatusCode, response.StatusCode)
 		})
 	}
