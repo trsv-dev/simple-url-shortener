@@ -24,6 +24,9 @@ func (ms *MockStorage) SetInStorage(longURL string) (string, error) {
 		return "", errors.New("передан невалидный URL")
 	}
 
+	// в оригинальном хранилище тут происходит проверка длинного URL
+	// на соответствие требованиям и генерация короткого URL. Так как это mock хранилища, то
+	// просто пропишем якобы полученный shortURL руками
 	shortURL := "shortURL"
 	ms.mockData[shortURL] = longURL
 
