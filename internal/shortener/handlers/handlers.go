@@ -108,7 +108,7 @@ func (h *AppHandler) APIShorten(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// формируем URL. добавляем к полученному короткому URL адрес сервера
+	// формируем URL, добавляем к полученному короткому URL адрес сервера
 	baseURL := config.GetServerConfig().BaseURL
 	answer := fmt.Sprint(baseURL + "/" + shortURL)
 
