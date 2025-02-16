@@ -2,6 +2,7 @@ package server
 
 import (
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/config"
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/gzipper"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/handlers"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/logger"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/router"
@@ -30,7 +31,9 @@ func NewServer() (*http.Server, error) {
 		zap.String("log_level", cfg.LogLevel),
 	)
 
-	return &http.Server{Addr: cfg.ServerAddress, Handler: logger.RequestAndResponseLogger(mux)}, nil
+	return &http.Server{
+		Addr:    cfg.ServerAddress,
+		Handler: logger.RequestAndResponseLogger(gzipper.GzipDecompressorMiddleware(gzipper.GzipCompressorMiddleware(mux)))}, nil
 }
 
 // RunServer Запуск сервера.
