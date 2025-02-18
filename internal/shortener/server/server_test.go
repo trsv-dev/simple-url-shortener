@@ -1,13 +1,24 @@
 package server
 
 import (
+	"bytes"
+	"context"
+	"flag"
 	"github.com/stretchr/testify/assert"
 	"net/http"
+	"os"
 	"testing"
 	"time"
 )
 
-func TestRunServer(t *testing.T) {
+func resetFlags() {
+	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
+}
+
+func TestNewServer(t *testing.T) {
+	// сбрасываем флаги
+	resetFlags()
+
 	server, err := NewServer()
 	assert.NoError(t, err)
 
@@ -27,7 +38,55 @@ func TestRunServer(t *testing.T) {
 
 	assert.Equal(t, http.StatusMethodNotAllowed, resp.StatusCode)
 
-	// Завершаем сервер
+	// Штатно завершаем сервер
 	err = server.Close()
+	assert.NoError(t, err)
+}
+
+func TestRunServer(t *testing.T) {
+	// сбрасываем флаги
+	resetFlags()
+
+	// Запускаем сервер в горутине
+	go func() {
+		err := RunServer()
+		if err != nil && err != http.ErrServerClosed {
+			t.Errorf("Ошибка при запуске сервера: %v", err)
+		}
+	}()
+
+	// Даем серверу немного времени на запуск
+	time.Sleep(2 * time.Millisecond)
+
+	// формируем тело запроса
+	body := bytes.NewBuffer([]byte("http://yandex.ru"))
+	// пробуем отправить простой запрос, чтобы убедиться, что сервер работает
+	resp, err := http.Post("http://127.0.0.1:8080", "text/html", body)
+	if err != nil {
+		t.Errorf("Ошибка при отправке запроса: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Проверяем статус ответа
+	assert.Equal(t, http.StatusCreated, resp.StatusCode)
+
+	// Завершаем сервер с помощью контекста
+	client := http.Client{}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", "http://127.0.0.1:8080", nil)
+	if err != nil {
+		t.Errorf("Ошибка при создании запроса: %v", err)
+		return
+	}
+
+	resp, err = client.Do(req)
+	if err != nil {
+		t.Errorf("Ошибка при отправке запроса на завершение: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+	defer os.Remove("/tmp/short-url-db.json")
 	assert.NoError(t, err)
 }
