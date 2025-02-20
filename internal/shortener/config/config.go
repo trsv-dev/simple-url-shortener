@@ -13,6 +13,7 @@ type Config struct {
 	BaseURL       string
 	Logging       bool
 	LogLevel      string
+	FileDB        string
 }
 
 // ServerConfig Указатель на структуру, получаемую после инициализации структуры в InitConfig()
@@ -27,6 +28,7 @@ func InitConfig() *Config {
 	flag.StringVar(&config.BaseURL, "b", "http://localhost:8080", "Base URL for shortened links")
 	flag.BoolVar(&config.Logging, "l", true, "Enable or disable logging")
 	flag.StringVar(&config.LogLevel, "ll", "Info", "Log level for logging (Debug, Info, Warn, Error, DPanic, Panic, Fatal)")
+	flag.StringVar(&config.FileDB, "f", "/tmp/short-url-db.json", "Set JSON file to save short URLs. To disable this feature - set empty key")
 
 	flag.Parse()
 
@@ -34,6 +36,7 @@ func InitConfig() *Config {
 	OverrideFromEnv(&config.BaseURL, "BASE_URL")
 	OverrideFromEnv(&config.Logging, "LOGGING")
 	OverrideFromEnv(&config.LogLevel, "LOG_LEVEL")
+	OverrideFromEnv(&config.FileDB, "FILE_STORAGE_PATH")
 
 	ServerConfig = config
 
@@ -69,6 +72,7 @@ func GetServerConfig() *Config {
 			BaseURL:       "http://localhost:8080",
 			Logging:       true,
 			LogLevel:      "Info",
+			FileDB:        "/tmp/short-url-db.json",
 		}
 		return defaultConfig
 	}
