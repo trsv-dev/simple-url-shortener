@@ -134,6 +134,7 @@ func TestURLStorage_SetEntryToFileDB(t *testing.T) {
 
 		// читаем данные из файла
 		data, err := io.ReadAll(file)
+		require.NoError(t, err)
 		require.Contains(t, string(data), `"uuid":"1"`)
 		require.Contains(t, string(data), `"short_url":"shortURL"`)
 		require.Contains(t, string(data), `"long_url":"http://example.com"`)
