@@ -49,7 +49,7 @@ func TestGetServerConfig(t *testing.T) {
 		{
 			name:                 "Not initialized config struct",
 			serverConfig:         nil,
-			expectedServerConfig: &Config{ServerAddress: "localhost:8080", BaseURL: "http://localhost:8080", Logging: true, LogLevel: "Info"},
+			expectedServerConfig: &Config{ServerAddress: "localhost:8080", BaseURL: "http://localhost:8080", Logging: true, LogLevel: "Info", FileDB: "/tmp/short-url-db.json"},
 		},
 	}
 
@@ -78,10 +78,12 @@ func TestOverrideFromEnv(t *testing.T) {
 		envValue3            string
 		envKey4              string
 		envValue4            string
+		envKey5              string
+		envValue5            string
 	}{
 		{
 			name:                 "Override server address and base url config fields given from default config to environment values",
-			expectedServerConfig: &Config{ServerAddress: "host-from-env:8002", BaseURL: "http://address-from-env:8002", Logging: true, LogLevel: "Debug"},
+			expectedServerConfig: &Config{ServerAddress: "host-from-env:8002", BaseURL: "http://address-from-env:8002", Logging: true, LogLevel: "Debug", FileDB: "/tmp/env-db.json"},
 			envKey1:              "SERVER_ADDRESS",
 			envValue1:            "host-from-env:8002",
 			envKey2:              "BASE_URL",
@@ -90,11 +92,13 @@ func TestOverrideFromEnv(t *testing.T) {
 			envValue3:            "True",
 			envKey4:              "LOG_LEVEL",
 			envValue4:            "Debug",
+			envKey5:              "FILE_STORAGE_PATH",
+			envValue5:            "/tmp/env-db.json",
 		},
 		{
 			name:                 "Override server address and base url config fields given from flags to environment values",
-			serverConfig:         &Config{ServerAddress: "host-from-flags:8001", BaseURL: "http://address-from-flags:8001", Logging: false, LogLevel: "Info"},
-			expectedServerConfig: &Config{ServerAddress: "host-from-env:8002", BaseURL: "http://address-from-env:8002", Logging: true, LogLevel: "Debug"},
+			serverConfig:         &Config{ServerAddress: "host-from-flags:8001", BaseURL: "http://address-from-flags:8001", Logging: false, LogLevel: "Info", FileDB: "/tmp/flag-db.json"},
+			expectedServerConfig: &Config{ServerAddress: "host-from-env:8002", BaseURL: "http://address-from-env:8002", Logging: true, LogLevel: "Debug", FileDB: "/tmp/env-db.json"},
 			envKey1:              "SERVER_ADDRESS",
 			envValue1:            "host-from-env:8002",
 			envKey2:              "BASE_URL",
@@ -103,6 +107,8 @@ func TestOverrideFromEnv(t *testing.T) {
 			envValue3:            "True",
 			envKey4:              "LOG_LEVEL",
 			envValue4:            "Debug",
+			envKey5:              "FILE_STORAGE_PATH",
+			envValue5:            "/tmp/env-db.json",
 		},
 	}
 
@@ -115,10 +121,12 @@ func TestOverrideFromEnv(t *testing.T) {
 				os.Setenv(tt.envKey2, tt.envValue2)
 				os.Setenv(tt.envKey3, tt.envValue3)
 				os.Setenv(tt.envKey4, tt.envValue4)
+				os.Setenv(tt.envKey5, tt.envValue5)
 				defer os.Unsetenv(tt.envKey1)
 				defer os.Unsetenv(tt.envKey2)
 				defer os.Unsetenv(tt.envKey3)
 				defer os.Unsetenv(tt.envKey4)
+				defer os.Unsetenv(tt.envKey5)
 			}
 
 			if tt.serverConfig != nil {
