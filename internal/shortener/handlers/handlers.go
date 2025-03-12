@@ -19,7 +19,7 @@ type AppHandler struct {
 
 // NewAppHandler Конструктор AppHandler
 func NewAppHandler(s storage.Storage) *AppHandler {
-	return &AppHandler{s}
+	return &AppHandler{storage: s}
 }
 
 // PostHandler Функция обработки запроса к "/".
@@ -125,4 +125,17 @@ func (h *AppHandler) APIShorten(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	w.Write(result)
+}
+
+// Ping При запросе проверяет соединение с базой данных
+func (h *AppHandler) Ping(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	if err := h.storage.Ping(); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
 }

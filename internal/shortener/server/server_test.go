@@ -19,7 +19,7 @@ func TestNewServer(t *testing.T) {
 	// сбрасываем флаги
 	resetFlags()
 
-	server, err := NewServer()
+	server, _, err := NewServer()
 	assert.NoError(t, err)
 
 	go func() {
@@ -47,9 +47,12 @@ func TestRunServer(t *testing.T) {
 	// сбрасываем флаги
 	resetFlags()
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// Запускаем сервер в горутине
 	go func() {
-		err := RunServer()
+		_, err := RunServer(ctx)
 		if err != nil && err != http.ErrServerClosed {
 			t.Errorf("Ошибка при запуске сервера: %v", err)
 		}
@@ -72,7 +75,7 @@ func TestRunServer(t *testing.T) {
 
 	// Завершаем сервер с помощью контекста
 	client := http.Client{}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
+	ctx, cancel = context.WithTimeout(context.Background(), 5*time.Millisecond)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, "GET", "http://127.0.0.1:8080", nil)
@@ -87,6 +90,6 @@ func TestRunServer(t *testing.T) {
 		return
 	}
 	defer resp.Body.Close()
-	defer os.Remove("/tmp/short-url-db.json")
+	defer os.Remove("/tmp/short-url-pgstorage.json")
 	assert.NoError(t, err)
 }

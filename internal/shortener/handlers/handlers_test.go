@@ -24,6 +24,16 @@ type MockStorage struct {
 	mockData map[string]string
 }
 
+// Абстрактный метод для удовлетворения интерфейсу Storage.
+func (ms *MockStorage) Ping() error {
+	return nil
+}
+
+// Абстрактный метод для удовлетворения интерфейсу Storage.
+func (ms *MockStorage) Close() error {
+	return nil
+}
+
 func (ms *MockStorage) SetInStorage(longURL string) (string, error) {
 	if longURL == "https://invalid-example.com" || longURL == "" {
 		return "", errors.New("передан невалидный URL")
