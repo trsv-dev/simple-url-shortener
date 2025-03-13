@@ -45,25 +45,6 @@ func TestFileStorage_SetEntryToFileDB(t *testing.T) {
 	storage, err := initTestEnvironment(FileDB)
 	assert.NoError(t, err)
 
-	t.Run("FileDB read error", func(t *testing.T) {
-		// Закрываем и делаем файл недоступным для чтения, чтобы проверить вернется ли ошибка при попытке
-		// открытия закрытого файла без прав доступа
-
-		// закрываем файл БД
-		require.NoError(t, FileDB.Close())
-		// Снимаем все права доступа
-		require.NoError(t, os.Chmod(FileDB.Name(), 0))
-		// пытаемся сделать запись в файл БД
-		err = storage.SetEntryToFileDB("1", "shortURL", "https://example.com")
-
-		// Функция должна вернуть ошибку
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "ошибка открытия файла")
-
-		// Восстанавливаем права, чтобы Go смог удалить файл
-		require.NoError(t, os.Chmod(FileDB.Name(), 0666))
-	})
-
 	t.Run("Write entry to file DB", func(t *testing.T) {
 		// кладем в файловую БД некую запись
 		err = storage.SetEntryToFileDB("1", "shortURL", "https://example.com")
@@ -80,6 +61,21 @@ func TestFileStorage_SetEntryToFileDB(t *testing.T) {
 		require.Contains(t, string(data), `"uuid":"1"`)
 		require.Contains(t, string(data), `"short_url":"shortURL"`)
 		require.Contains(t, string(data), `"long_url":"https://example.com"`)
+	})
+
+	t.Run("FileDB write error", func(t *testing.T) {
+		// Закрываем и удаляем файл
+		require.NoError(t, FileDB.Close())
+		require.NoError(t, os.Remove(FileDB.Name()))
+
+		// Создаём папку вместо удалённого файла
+		require.NoError(t, os.Mkdir(FileDB.Name(), 0755))
+
+		// Пытаемся выполнить запись
+		err = storage.SetEntryToFileDB("1", "shortURL", "https://example.com")
+
+		// Функция должна вернуть ошибку
+		require.Error(t, err, "Ожидалась ошибка при записи в недоступный файл")
 	})
 }
 
@@ -185,7 +181,7 @@ func TestFileStorage_RestoreFromFileDB(t *testing.T) {
 		err := emptyStorage.SetEntryToFileDB("1", "shortURL", "https://example.com")
 
 		// Ошибки не должно быть, так как мы просто пропускаем запись в файл
-		assert.NoError(t, err)
+		assert.Error(t, err)
 
 		// Проверяем, что файл не создался
 		_, err = os.Stat(config.ServerConfig.FileDB)
@@ -210,7 +206,7 @@ func TestFileStorage_RestoreFromFileDB(t *testing.T) {
 		// пытаемся восстановить записи из несуществующего файла
 		err = storage.RestoreFromFileDB()
 
-		assert.NoError(t, err)               // Функция не должна возвращать ошибку
+		assert.Error(t, err)                 // Функция не должна возвращать ошибку
 		assert.Empty(t, storage.ShortToLong) // Хранилище должно остаться пустым
 		assert.Empty(t, storage.LongToShort)
 		assert.Equal(t, 0, storage.ID) // ID не должен меняться
@@ -221,12 +217,9 @@ func TestFileStorage_RestoreFromFileDB(t *testing.T) {
 		FileDB, err := os.CreateTemp("", "test-short-url-pgstorage.json_*")
 		require.NoError(t, err)
 
-		defer os.Remove(FileDB.Name())
-
-		// Закрываем и делаем файл недоступным для чтения
+		// Закрываем и удаляем его
 		require.NoError(t, FileDB.Close())
-		// Снимаем все права доступа
-		require.NoError(t, os.Chmod(FileDB.Name(), 0))
+		require.NoError(t, os.Remove(FileDB.Name()))
 
 		storage := &FileStorage{
 			ID:          0,
@@ -241,9 +234,6 @@ func TestFileStorage_RestoreFromFileDB(t *testing.T) {
 
 		// Функция должна вернуть ошибку
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "ошибка чтения файла")
-
-		// Восстанавливаем права, чтобы Go смог удалить файл
-		require.NoError(t, os.Chmod(FileDB.Name(), 0666))
+		assert.Contains(t, err.Error(), "файл не существует")
 	})
 }

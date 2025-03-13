@@ -127,7 +127,7 @@ func (h *AppHandler) APIShorten(w http.ResponseWriter, r *http.Request) {
 	w.Write(result)
 }
 
-// Ping При запросе проверяет соединение с базой данных
+// Ping При GET-запросе к "/ping" проверяет соединение с базой данных
 func (h *AppHandler) Ping(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)

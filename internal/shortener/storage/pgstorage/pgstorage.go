@@ -6,14 +6,12 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/config"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/logger"
-	"github.com/trsv-dev/simple-url-shortener/internal/shortener/storage"
 	"go.uber.org/zap"
 	"time"
 )
 
 type PgStorage struct {
-	storage.Storage
-	db *sql.DB
+	DB *sql.DB
 }
 
 func InitStorage() *PgStorage {
@@ -26,15 +24,27 @@ func InitStorage() *PgStorage {
 	}
 
 	return &PgStorage{
-		db: postgres,
+		DB: postgres,
 	}
+}
+
+// SetInStorage Абстрактный метод для удовлетворения интерфейсу Storage.
+// TODO реализовать метод для PostgreSQL
+func (pg *PgStorage) SetInStorage(longURL string) (string, error) {
+	return "", nil
+}
+
+// GetFromStorage Абстрактный метод для удовлетворения интерфейсу Storage.
+// TODO реализовать метод для PostgreSQL
+func (pg *PgStorage) GetFromStorage(shortURL string) (string, error) {
+	return "", nil
 }
 
 func (pg *PgStorage) Ping() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
-	if err := pg.db.PingContext(ctx); err != nil {
+	if err := pg.DB.PingContext(ctx); err != nil {
 		logger.Log.Error("База данных Postgres не отвечает", zap.String("error", err.Error()))
 		return err
 	}
@@ -43,5 +53,5 @@ func (pg *PgStorage) Ping() error {
 }
 
 func (pg *PgStorage) Close() error {
-	return pg.db.Close()
+	return pg.DB.Close()
 }

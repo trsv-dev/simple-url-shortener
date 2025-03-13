@@ -95,7 +95,7 @@ func (fs *FileStorage) IsFileStorageEnabled() bool {
 func (fs *FileStorage) SetEntryToFileDB(id, shortURL, longURL string) error {
 	// если в конфигурации сервера пустое значение FileDB - выходим из функции
 	if !fs.IsFileStorageEnabled() {
-		return nil
+		return fmt.Errorf("файловое хранилище не задано в конфигурации")
 	}
 
 	filename := config.GetServerConfig().FileDB
@@ -143,7 +143,7 @@ func (fs *FileStorage) SetEntryToFileDB(id, shortURL, longURL string) error {
 func (fs *FileStorage) RestoreFromFileDB() error {
 	// если в конфигурации сервера пустое значение FileDB - выходим из функции
 	if !fs.IsFileStorageEnabled() {
-		return nil
+		return fmt.Errorf("файловое хранилище не инициализировано")
 	}
 
 	// если в конфигурации сервера не пустое значение FileDB - продолжаем
@@ -154,7 +154,7 @@ func (fs *FileStorage) RestoreFromFileDB() error {
 	if err != nil {
 		// если файла не существует
 		if os.IsNotExist(err) {
-			return nil
+			return fmt.Errorf("файл не существует: %v", err)
 		}
 
 		return fmt.Errorf("ошибка чтения файла: %v", err)
