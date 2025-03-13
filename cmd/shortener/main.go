@@ -16,7 +16,7 @@ func main() {
 		panic(err)
 	}
 
-	// закрываем БД через метод Close(), полученный из хранилища
+	// закрываем БД через метод Close(), полученный из хранилища.
 	defer func() {
 		if storage != nil {
 			if err = storage.Close(); err != nil {
