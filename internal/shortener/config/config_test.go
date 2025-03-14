@@ -49,7 +49,7 @@ func TestGetServerConfig(t *testing.T) {
 		{
 			name:                 "Not initialized config struct",
 			serverConfig:         nil,
-			expectedServerConfig: &Config{ServerAddress: "localhost:8080", BaseURL: "http://localhost:8080", Logging: true, LogLevel: "Info", FileDB: "/tmp/short-url-db.json"},
+			expectedServerConfig: &Config{ServerAddress: "localhost:8080", BaseURL: "http://localhost:8080", Logging: true, LogLevel: "Info", FileDB: "/tmp/short-url-pgstorage.json"},
 		},
 	}
 
@@ -83,7 +83,7 @@ func TestOverrideFromEnv(t *testing.T) {
 	}{
 		{
 			name:                 "Override server address and base url config fields given from default config to environment values",
-			expectedServerConfig: &Config{ServerAddress: "host-from-env:8002", BaseURL: "http://address-from-env:8002", Logging: true, LogLevel: "Debug", FileDB: "/tmp/env-db.json"},
+			expectedServerConfig: &Config{ServerAddress: "host-from-env:8002", BaseURL: "http://address-from-env:8002", Logging: true, LogLevel: "Debug", FileDB: "/tmp/env-pgstorage.json"},
 			envKey1:              "SERVER_ADDRESS",
 			envValue1:            "host-from-env:8002",
 			envKey2:              "BASE_URL",
@@ -93,12 +93,12 @@ func TestOverrideFromEnv(t *testing.T) {
 			envKey4:              "LOG_LEVEL",
 			envValue4:            "Debug",
 			envKey5:              "FILE_STORAGE_PATH",
-			envValue5:            "/tmp/env-db.json",
+			envValue5:            "/tmp/env-pgstorage.json",
 		},
 		{
 			name:                 "Override server address and base url config fields given from flags to environment values",
-			serverConfig:         &Config{ServerAddress: "host-from-flags:8001", BaseURL: "http://address-from-flags:8001", Logging: false, LogLevel: "Info", FileDB: "/tmp/flag-db.json"},
-			expectedServerConfig: &Config{ServerAddress: "host-from-env:8002", BaseURL: "http://address-from-env:8002", Logging: true, LogLevel: "Debug", FileDB: "/tmp/env-db.json"},
+			serverConfig:         &Config{ServerAddress: "host-from-flags:8001", BaseURL: "http://address-from-flags:8001", Logging: false, LogLevel: "Info", FileDB: "/tmp/flag-pgstorage.json"},
+			expectedServerConfig: &Config{ServerAddress: "host-from-env:8002", BaseURL: "http://address-from-env:8002", Logging: true, LogLevel: "Debug", FileDB: "/tmp/env-pgstorage.json"},
 			envKey1:              "SERVER_ADDRESS",
 			envValue1:            "host-from-env:8002",
 			envKey2:              "BASE_URL",
@@ -108,7 +108,7 @@ func TestOverrideFromEnv(t *testing.T) {
 			envKey4:              "LOG_LEVEL",
 			envValue4:            "Debug",
 			envKey5:              "FILE_STORAGE_PATH",
-			envValue5:            "/tmp/env-db.json",
+			envValue5:            "/tmp/env-pgstorage.json",
 		},
 	}
 

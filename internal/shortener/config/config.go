@@ -14,6 +14,7 @@ type Config struct {
 	Logging       bool
 	LogLevel      string
 	FileDB        string
+	DatabaseDSN   string
 }
 
 // ServerConfig Указатель на структуру, получаемую после инициализации структуры в InitConfig()
@@ -26,9 +27,10 @@ func InitConfig() *Config {
 	config := &Config{}
 	flag.StringVar(&config.ServerAddress, "a", "localhost:8080", "HTTP server address")
 	flag.StringVar(&config.BaseURL, "b", "http://localhost:8080", "Base URL for shortened links")
-	flag.BoolVar(&config.Logging, "l", true, "Enable or disable logging")
+	flag.BoolVar(&config.Logging, "l", true, "Enable or disable logging by -l=true or -l=false")
 	flag.StringVar(&config.LogLevel, "ll", "Info", "Log level for logging (Debug, Info, Warn, Error, DPanic, Panic, Fatal)")
-	flag.StringVar(&config.FileDB, "f", "/tmp/short-url-db.json", "Set JSON file to save short URLs. To disable this feature - set empty key")
+	flag.StringVar(&config.FileDB, "f", "/tmp/short-url-pgstorage.json", "Set JSON file to save short URLs. To disable this feature - set empty key")
+	flag.StringVar(&config.DatabaseDSN, "d", "", "Data source name for DB. Example for PostgreSQL: -d 'host=localhost port=5432 user=db_user password=xxxxx dbname=db_name sslmode=disable'")
 
 	flag.Parse()
 
@@ -37,6 +39,7 @@ func InitConfig() *Config {
 	OverrideFromEnv(&config.Logging, "LOGGING")
 	OverrideFromEnv(&config.LogLevel, "LOG_LEVEL")
 	OverrideFromEnv(&config.FileDB, "FILE_STORAGE_PATH")
+	OverrideFromEnv(&config.DatabaseDSN, "DATABASE_DSN")
 
 	ServerConfig = config
 
@@ -72,7 +75,8 @@ func GetServerConfig() *Config {
 			BaseURL:       "http://localhost:8080",
 			Logging:       true,
 			LogLevel:      "Info",
-			FileDB:        "/tmp/short-url-db.json",
+			FileDB:        "/tmp/short-url-pgstorage.json",
+			DatabaseDSN:   "",
 		}
 		return defaultConfig
 	}
