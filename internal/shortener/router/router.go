@@ -20,5 +20,8 @@ func Router(h *handlers.AppHandler) *chi.Mux {
 	// Обработка POST-запросов в формате JSON для создания короткого URL.
 	router.Post("/api/shorten", h.APIShorten)
 
+	// Обработка Get-запроса, проверяющего соединение с базой данных.
+	router.Get("/ping", h.Ping)
+
 	return router
 }

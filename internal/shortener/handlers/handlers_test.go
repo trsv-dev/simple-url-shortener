@@ -24,6 +24,16 @@ type MockStorage struct {
 	mockData map[string]string
 }
 
+// Абстрактный метод для удовлетворения интерфейсу Storage.
+func (ms *MockStorage) Ping() error {
+	return nil
+}
+
+// Абстрактный метод для удовлетворения интерфейсу Storage.
+func (ms *MockStorage) Close() error {
+	return nil
+}
+
 func (ms *MockStorage) SetInStorage(longURL string) (string, error) {
 	if longURL == "https://invalid-example.com" || longURL == "" {
 		return "", errors.New("передан невалидный URL")
@@ -43,6 +53,16 @@ func (ms *MockStorage) GetFromStorage(shortURL string) (string, error) {
 	}
 
 	return value, nil
+}
+
+// Структура, которая имитирует хранилище, выдающее ошибку при обращении к эндпоинту "/ping".
+type PingError struct {
+	MockStorage // для имплементации интерфейса storage.Storage, чтобы не описывать абстрактные методы
+	pingErr     error
+}
+
+func (p *PingError) Ping() error {
+	return p.pingErr
 }
 
 func TestGetHandler(t *testing.T) {
@@ -190,6 +210,33 @@ func TestAPIShorten(t *testing.T) {
 			if tt.expectedContentType != "" {
 				assert.Equal(t, tt.expectedContentType, res.Header.Get("Content-Type"))
 			}
+		})
+	}
+}
+
+func TestPing(t *testing.T) {
+	testTable := []struct {
+		name           string
+		method         string
+		storageError   error
+		expectedStatus int
+	}{
+		{name: "method GET - status OK", method: http.MethodGet, storageError: nil, expectedStatus: http.StatusOK},
+		{name: "method GET - storage error", method: http.MethodGet, storageError: errors.New("db error"), expectedStatus: http.StatusInternalServerError},
+		{name: "method POST - method not allowed", method: http.MethodPost, storageError: nil, expectedStatus: http.StatusMethodNotAllowed},
+	}
+
+	for _, tt := range testTable {
+		t.Run(tt.name, func(t *testing.T) {
+			pingError := &PingError{pingErr: tt.storageError}
+			handler := AppHandler{storage: pingError}
+
+			r := httptest.NewRequest(tt.method, "/ping", nil)
+			w := httptest.NewRecorder()
+
+			handler.Ping(w, r)
+
+			assert.Equal(t, tt.expectedStatus, w.Code)
 		})
 	}
 }
