@@ -22,6 +22,8 @@ func InitLogger(level string) error {
 	// создаём новую конфигурацию логгера
 	cfg := zap.NewProductionConfig()
 	cfg.Level = lvl
+	// Можно включить / выключить трейсбек
+	cfg.DisableStacktrace = true
 
 	// создаём логгер на основе конфигурации
 	logger, err := cfg.Build()
