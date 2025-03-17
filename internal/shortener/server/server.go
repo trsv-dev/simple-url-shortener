@@ -8,9 +8,6 @@ import (
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/middleware"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/router"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/storage"
-	"github.com/trsv-dev/simple-url-shortener/internal/shortener/storage/file"
-	"github.com/trsv-dev/simple-url-shortener/internal/shortener/storage/memory"
-	"github.com/trsv-dev/simple-url-shortener/internal/shortener/storage/pgstorage"
 	"go.uber.org/zap"
 	"net/http"
 )
@@ -26,14 +23,7 @@ func NewServer() (*http.Server, storage.Storage, error) {
 	}
 
 	// в зависимости от конфигурации устанавливаем тип хранилища.
-	var URLs storage.Storage
-	if cfg.DatabaseDSN != "" {
-		URLs = pgstorage.InitStorage()
-	} else if cfg.FileDB != "" {
-		URLs = file.InitStorage()
-	} else {
-		URLs = memory.InitStorage()
-	}
+	URLs := storage.SelectStorage(cfg)
 
 	h := handlers.NewAppHandler(URLs)
 	mux := router.Router(h)
