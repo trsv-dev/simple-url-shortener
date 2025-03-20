@@ -38,7 +38,7 @@ func initTestEnvironment(fileDB *os.File) (*FileStorage, error) {
 
 // Проверка записи в файловую БД через SetEntryToFileDB()
 func TestFileStorage_SetEntryToFileDB(t *testing.T) {
-	FileDB, err := os.CreateTemp("", "test-short-url-pgstorage.json_*.json")
+	FileDB, err := os.CreateTemp("", "test-short-url-storage.json_*.json")
 	require.NoError(t, err)
 	defer os.Remove(FileDB.Name())
 
@@ -80,7 +80,7 @@ func TestFileStorage_SetEntryToFileDB(t *testing.T) {
 }
 
 func TestFileStorage_SetInStorage(t *testing.T) {
-	FileDB, err := os.CreateTemp("", "test-short-url-pgstorage.json_*.json")
+	FileDB, err := os.CreateTemp("", "test-short-url-storage.json_*.json")
 	require.NoError(t, err)
 	defer os.Remove(FileDB.Name())
 
@@ -127,7 +127,7 @@ func TestFileStorage_SetInStorage(t *testing.T) {
 }
 
 func TestMemoryStorage_GetFromStorage(t *testing.T) {
-	FileDB, err := os.CreateTemp("", "test-short-url-pgstorage.json_*.json")
+	FileDB, err := os.CreateTemp("", "test-short-url-storage.json_*.json")
 	require.NoError(t, err)
 	defer os.Remove(FileDB.Name())
 
@@ -151,7 +151,7 @@ func TestMemoryStorage_GetFromStorage(t *testing.T) {
 }
 
 func TestFileStorage_RestoreFromFileDB(t *testing.T) {
-	FileDB, err := os.CreateTemp("", "test-short-url-pgstorage.json_*.json")
+	FileDB, err := os.CreateTemp("", "test-short-url-storage.json_*.json")
 	require.NoError(t, err)
 	defer os.Remove(FileDB.Name())
 
@@ -191,7 +191,7 @@ func TestFileStorage_RestoreFromFileDB(t *testing.T) {
 
 	t.Run("FileDB does not exist", func(t *testing.T) {
 		// Создаём временное имя файла, но сам файл не создаём.
-		FileDB, err := os.CreateTemp("", "test-short-url-pgstorage.json_*.json")
+		FileDB, err := os.CreateTemp("", "test-short-url-storage.json_*.json")
 		require.NoError(t, err)
 		os.Remove(FileDB.Name()) // Удаляем файл сразу, чтобы симулировать его отсутствие.
 
@@ -214,7 +214,7 @@ func TestFileStorage_RestoreFromFileDB(t *testing.T) {
 
 	t.Run("FileDB read error", func(t *testing.T) {
 		// Создаём временное имя файла, но сам файл не создаём.
-		FileDB, err := os.CreateTemp("", "test-short-url-pgstorage.json_*")
+		FileDB, err := os.CreateTemp("", "test-short-url-storage.json_*")
 		require.NoError(t, err)
 
 		// Закрываем и удаляем его

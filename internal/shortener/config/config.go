@@ -29,7 +29,7 @@ func InitConfig() *Config {
 	flag.StringVar(&config.BaseURL, "b", "http://localhost:8080", "Base URL for shortened links")
 	flag.BoolVar(&config.Logging, "l", true, "Enable or disable logging by -l=true or -l=false")
 	flag.StringVar(&config.LogLevel, "ll", "Info", "Log level for logging (Debug, Info, Warn, Error, DPanic, Panic, Fatal)")
-	flag.StringVar(&config.FileDB, "f", "/tmp/short-url-pgstorage.json", "Set JSON file to save short URLs. To disable this feature - set empty key")
+	flag.StringVar(&config.FileDB, "f", "/tmp/short-url-storage.json", "Set JSON file to save short URLs. To disable this feature - set empty key")
 	flag.StringVar(&config.DatabaseDSN, "d", "", "Data source name for DB. Example for PostgreSQL: -d 'host=localhost port=5432 user=db_user password=xxxxx dbname=db_name sslmode=disable'")
 
 	flag.Parse()
@@ -75,7 +75,7 @@ func GetServerConfig() *Config {
 			BaseURL:       "http://localhost:8080",
 			Logging:       true,
 			LogLevel:      "Info",
-			FileDB:        "/tmp/short-url-pgstorage.json",
+			FileDB:        "/tmp/short-url-storage.json",
 			DatabaseDSN:   "",
 		}
 		return defaultConfig

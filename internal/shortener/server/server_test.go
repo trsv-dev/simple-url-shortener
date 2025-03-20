@@ -29,7 +29,7 @@ func TestNewServer(t *testing.T) {
 	}()
 
 	// Даем серверу немного времени на запуск
-	time.Sleep(2 * time.Millisecond)
+	time.Sleep(5 * time.Millisecond)
 
 	// Пробуем отправить простой запрос, чтобы убедиться, что сервер работает
 	resp, err := http.Get("http://127.0.0.1:8080")
@@ -90,6 +90,6 @@ func TestRunServer(t *testing.T) {
 		return
 	}
 	defer resp.Body.Close()
-	defer os.Remove("/tmp/short-url-pgstorage.json")
+	defer os.Remove("/tmp/short-url-storage.json")
 	assert.NoError(t, err)
 }
