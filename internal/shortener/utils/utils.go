@@ -4,6 +4,7 @@ import (
 	"errors"
 	"math/rand"
 	"regexp"
+	"strings"
 	"time"
 )
 
@@ -18,14 +19,19 @@ func init() {
 
 // MakeShortURL Создание рандомной строки заданной длины из константного набора символов.
 func MakeShortURL(length int) (string, error) {
-	if length < 5 {
+	if length < 8 {
 		return "", errors.New("переданная длина слишком мала для генерации URL")
 	}
-	var str string
+	var builder strings.Builder
+	builder.Grow(length) // Предварительное выделение памяти
+
 	for i := 0; i < length; i++ {
-		str += string(latin[random.Intn(len(latin))])
+		builder.WriteByte(latin[random.Intn(len(latin))])
 	}
-	return str, nil
+	return builder.String(), nil
+
+	// для тестов на коллизии
+	//return "12345678", nil
 }
 
 // IsValidURL Проверка переданного URL на валидность (URL не пустой и соответствует требованиям к URL).
