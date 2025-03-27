@@ -3,6 +3,7 @@ package storage
 import (
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/config"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/logger"
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/models"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/storage/file"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/storage/memory"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/storage/pgstorage"
@@ -17,6 +18,7 @@ import (
 type Storage interface {
 	SetInStorage(longURL string) (string, error)
 	GetFromStorage(shortURL string) (string, error)
+	SetBatchInStorage(batch []models.BatchItem) error
 	Ping() error
 	Close() error
 }

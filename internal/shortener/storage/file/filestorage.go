@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/config"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/logger"
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/models"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/utils"
 	"go.uber.org/zap"
 	"os"
 	"strconv"
+	"sync"
 )
 
 // Длина генерируемой последовательности символов.
@@ -24,6 +26,7 @@ type FileStorage struct {
 	ID          int
 	LongToShort map[string]string
 	ShortToLong map[string]string
+	mu          sync.RWMutex
 }
 
 // InitStorage Инициализация хранилища.
@@ -44,6 +47,10 @@ func InitStorage() *FileStorage {
 }
 
 func (fs *FileStorage) SetInStorage(longURL string) (string, error) {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	// если длинный URL валидный
 	if utils.IsValidURL(longURL) {
 		if shortURL, ok := fs.LongToShort[longURL]; ok {
 			return shortURL, nil
@@ -51,9 +58,10 @@ func (fs *FileStorage) SetInStorage(longURL string) (string, error) {
 
 		var shortURL string
 		var err error
-		// Проверяем уникальность сгенерированного короткого URL.
-		// Если короткий URL существует, цикл повторяется для генерации нового.
-		for {
+		// если нет - генерируем новый shortURL, если коллизии и не получается за три попытки, то пропускаем,
+		// shortURL при этом будет пустым
+		for attempt := 0; attempt < 3; attempt++ {
+			// генерируем короткий URL
 			shortURL, err = utils.MakeShortURL(length)
 			if err != nil {
 				return "", fmt.Errorf("ошибка при генерации короткого URL: %v", err)
@@ -66,6 +74,7 @@ func (fs *FileStorage) SetInStorage(longURL string) (string, error) {
 		fs.LongToShort[longURL], fs.ShortToLong[shortURL] = shortURL, longURL
 		fs.ID++
 
+		// записываем в файл
 		if fs.IsFileStorageEnabled() {
 			if err := fs.SetEntryToFileDB(strconv.Itoa(fs.ID), shortURL, longURL); err != nil {
 				return "", fmt.Errorf("ошибка записи в файл %v: %v", config.GetServerConfig().FileDB, err)
@@ -75,6 +84,65 @@ func (fs *FileStorage) SetInStorage(longURL string) (string, error) {
 		return fs.LongToShort[longURL], nil
 	}
 	return "", fmt.Errorf("передан невалидный URL")
+}
+
+func (fs *FileStorage) SetBatchInStorage(batch []models.BatchItem) error {
+	baseURL := config.GetServerConfig().BaseURL
+
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+
+	// для каждого длинного URL в батче проверяем
+	for i := range batch {
+		// если длинный URL валидный
+		if !utils.IsValidURL(batch[i].OriginalURL) {
+			continue
+		}
+
+		// проверяем, есть ли уже длинный (Original URL) URL в хранилище
+		if existingShortURL, ok := fs.LongToShort[batch[i].OriginalURL]; ok {
+			// если есть - просто присваиваем соответствующему полю в структуре
+			batch[i].ShortURL = baseURL + "/" + existingShortURL
+			continue
+		}
+
+		var (
+			shortURL string
+			err      error
+		)
+
+		// если нет - генерируем новый shortURL, если коллизии и не получается за три попытки, то пропускаем,
+		// shortURL при этом будет пустым
+		for attempt := 0; attempt < 3; attempt++ {
+			// генерируем короткий URL
+			shortURL, err = utils.MakeShortURL(length)
+			if err != nil {
+				return fmt.Errorf("ошибка при генерации короткого URL: %v", err)
+			}
+
+			// проверяем, нет ли коллизии по shortURL
+			if _, err := fs.GetFromStorage(shortURL); err == nil {
+				logger.Log.Info("Коллизия shortURL, пробуем заново", zap.String("shortURL", shortURL))
+				continue
+			}
+
+			// если коллизии нет, то вносим в хранилище и в возвратную структуру батча
+			fs.LongToShort[batch[i].OriginalURL], fs.ShortToLong[shortURL] = shortURL, batch[i].OriginalURL
+			fs.ID++
+
+			batch[i].ShortURL = baseURL + "/" + shortURL
+
+			// записываем в файл
+			if fs.IsFileStorageEnabled() {
+				if err := fs.SetEntryToFileDB(strconv.Itoa(fs.ID), shortURL, batch[i].OriginalURL); err != nil {
+					return fmt.Errorf("ошибка записи в файл %v: %v", config.GetServerConfig().FileDB, err)
+				}
+			}
+			break
+		}
+	}
+
+	return nil
 }
 
 // GetFromStorage Поиск и возврат найденного длинного URL по переданному короткому URL.
@@ -129,7 +197,7 @@ func (fs *FileStorage) SetEntryToFileDB(id, shortURL, longURL string) error {
 		return fmt.Errorf("ошибка записи в файл: %v", err)
 	}
 
-	logger.Log.Info("Запись сохранена в файловую БД:", zap.String("ID", id), zap.String("URL", longURL))
+	logger.Log.Debug("Запись сохранена в файловую БД:", zap.String("ID", id), zap.String("URL", longURL))
 
 	// Сбрасываем буфер в файл
 	if err = writer.Flush(); err != nil {

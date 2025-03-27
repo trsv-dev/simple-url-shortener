@@ -3,13 +3,12 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"strings"
-
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/config"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/models"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/storage"
+	"io"
+	"net/http"
+	"strings"
 )
 
 // AppHandler Структура для работы с зависимостями хендлеров.
@@ -138,4 +137,53 @@ func (h *AppHandler) Ping(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+// Batch Функция обработки пакетных POST-запросов в формате JSON к /api/shorten/batch.
+func (h *AppHandler) Batch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	// создаем слайс структур batch
+	batch := make([]models.BatchItem, 0)
+
+	// читаем тело запроса
+	defer r.Body.Close()
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Ошибка чтения запроса", http.StatusInternalServerError)
+		return
+	}
+
+	// анмаршаллим тело запроса прямо в слайс структур
+	err = json.Unmarshal(body, &batch)
+	if err != nil {
+		http.Error(w, "Невалидная структура запроса", http.StatusBadRequest)
+		return
+	}
+
+	// проверяем элементы batch на пустые поля
+	if len(batch) == 0 {
+		http.Error(w, "Батчи не могут быть пустыми", http.StatusBadRequest)
+		return
+	}
+
+	err = h.storage.SetBatchInStorage(batch)
+	if err != nil {
+		http.Error(w, "", http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	data, err := json.Marshal(&batch)
+	if err != nil {
+		http.Error(w, "ошибка получения структуры ответа", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	w.Write(data)
 }
