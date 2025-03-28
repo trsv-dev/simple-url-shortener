@@ -4,9 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"github.com/stretchr/testify/assert"
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/models"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -32,6 +34,20 @@ func (ms *MockStorage) Ping() error {
 // Абстрактный метод для удовлетворения интерфейсу Storage.
 func (ms *MockStorage) Close() error {
 	return nil
+}
+
+// Абстрактный метод для удовлетворения интерфейсу Storage.
+func (ms *MockStorage) SetBatchInStorage(batch []models.BatchItem) error {
+	// Имитируем процесс сокращения URL и добавления его в структуру batch
+	for i := range batch {
+		if batch[i].OriginalURL != "" {
+			// Имитируем сокращение
+			shortURL := "http://127.0.0.1:8080/" + "shortURL" + strconv.Itoa(i+1) // Генерация короткого URL
+			batch[i].ShortURL = shortURL
+		}
+	}
+
+	return nil // Возвращаем nil, чтобы тест проходил успешно
 }
 
 func (ms *MockStorage) SetInStorage(longURL string) (string, error) {
@@ -237,6 +253,67 @@ func TestPing(t *testing.T) {
 			handler.Ping(w, r)
 
 			assert.Equal(t, tt.expectedStatus, w.Code)
+		})
+	}
+}
+
+func TestAppHandler_Batch(t *testing.T) {
+	// для APIShorten хендлера передаем структуру в виде "длинная ссылка: короткая ссылка"
+	mockStorage := &MockStorage{
+		mockData: map[string]string{"https://example.com": "shortURL"},
+	}
+	URL := "/api/shorten/batch"
+
+	testTable := []struct {
+		name           string
+		method         string
+		requestBody    string
+		expectedData   string
+		expectedStatus int
+	}{
+		{
+			name:   "Empty batch request",
+			method: http.MethodPost, requestBody: `[]`,
+			expectedData:   "Батчи не могут быть пустыми\n",
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:           "Valid batch request",
+			method:         http.MethodPost,
+			requestBody:    `[{"correlation_id": "abcd1234", "original_url": "https://example.com"}]`,
+			expectedData:   `[{"correlation_id":"abcd1234","original_url":"https://example.com","short_url":"http://127.0.0.1:8080/shortURL1"}]`,
+			expectedStatus: http.StatusCreated,
+		},
+		{
+			name:           "Wrong method (GET)",
+			method:         http.MethodGet,
+			requestBody:    `[{"correlation_id": "abcd1234", "original_url": "https://example.com"}]`,
+			expectedData:   "",
+			expectedStatus: http.StatusMethodNotAllowed,
+		},
+		{
+			name:           "Invalid JSON",
+			method:         http.MethodPost,
+			requestBody:    `[{correlation_id": "abcd1234", "original_url": "https://example.com"}]`,
+			expectedData:   "Невалидная структура запроса\n",
+			expectedStatus: http.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range testTable {
+		t.Run(tt.name, func(t *testing.T) {
+			h := NewAppHandler(mockStorage)
+			body := strings.NewReader(tt.requestBody)
+			r := httptest.NewRequest(tt.method, URL, body)
+			w := httptest.NewRecorder()
+
+			h.Batch(w, r)
+
+			res := w.Result()
+			defer res.Body.Close()
+
+			assert.Equal(t, tt.expectedStatus, res.StatusCode)
+			assert.Equal(t, tt.expectedData, w.Body.String())
 		})
 	}
 }

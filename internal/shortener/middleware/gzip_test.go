@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/stretchr/testify/require"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/handlers"
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/models"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -26,6 +27,11 @@ func (ms *MockStorage) Ping() error {
 
 // Абстрактный метод для удовлетворения интерфейсу Storage.
 func (ms *MockStorage) Close() error {
+	return nil
+}
+
+// Абстрактный метод для удовлетворения интерфейсу Storage.
+func (ms *MockStorage) SetBatchInStorage(batch []models.BatchItem) error {
 	return nil
 }
 

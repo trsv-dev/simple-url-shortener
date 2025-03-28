@@ -5,8 +5,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/config"
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/models"
 	"io"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -235,5 +237,53 @@ func TestFileStorage_RestoreFromFileDB(t *testing.T) {
 		// Функция должна вернуть ошибку
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "файл не существует")
+	})
+}
+
+func TestFileStorage_SetBatchInStorage(t *testing.T) {
+	FileDB, err := os.CreateTemp("", "test-short-url-storage.json_*.json")
+	require.NoError(t, err)
+	defer os.Remove(FileDB.Name())
+
+	storage, err := initTestEnvironment(FileDB)
+	assert.NoError(t, err)
+
+	t.Run("Set valid batch", func(t *testing.T) {
+		batch := []models.BatchItem{
+			{
+				CorrelationID: "abcd1234",
+				OriginalURL:   "https://example.com",
+			},
+			{
+				CorrelationID: "efgh5678",
+				OriginalURL:   "https://example2.com",
+			},
+		}
+
+		err := storage.SetBatchInStorage(batch)
+		assert.NoError(t, err)
+
+		correlationID1 := "abcd1234"
+		originalURL1 := "https://example.com"
+		correlationID2 := "efgh5678"
+		originalURL2 := "https://example2.com"
+
+		shortURL := strings.TrimPrefix(batch[0].ShortURL, "http://localhost:8080/")
+
+		// проверяем получение оригинального URL с помощью полученного из батча короткого URL
+		result, err := storage.GetFromStorage(shortURL)
+		assert.NoError(t, err)
+		assert.Equal(t, originalURL1, result)
+
+		// проверяем, что в батче после получения короткого URL остальные элементы без изменений
+		assert.Equal(t, correlationID1, batch[0].CorrelationID)
+		assert.Equal(t, originalURL1, batch[0].OriginalURL)
+		assert.Equal(t, correlationID2, batch[1].CorrelationID)
+		assert.Equal(t, originalURL2, batch[1].OriginalURL)
+
+		// проверяем, что приходит короткий URL длиной 8 символов
+		assert.Equal(t, length, len(shortURL))
+		// проверяем, что генерируются уникальные короткие URL
+		assert.NotEqual(t, batch[0].ShortURL, batch[1].ShortURL)
 	})
 }
