@@ -184,3 +184,42 @@ func TestPgStorage_SetInStorage(t *testing.T) {
 		assert.NoError(t, mock.ExpectationsWereMet())
 	})
 }
+
+//func TestPgStorage_SetBatchInStorage(t *testing.T) {
+//	db, mock, err := sqlmock.New()
+//	require.NoError(t, err)
+//	defer db.Close()
+//
+//	pg := PgStorage{DB: db}
+//
+//	t.Run("Valid shortURL", func(t *testing.T) {
+//		mock.ExpectBegin()
+//
+//		// Используем регулярное выражение для игнорирования пробелов
+//		expectedSQL := regexp.QuoteMeta(`
+//            INSERT INTO urls (long_url, short_url)
+//            VALUES ($1, $2)
+//            ON CONFLICT (long_url)
+//            DO UPDATE SET short_url=urls.short_url
+//            RETURNING short_url
+//        `)
+//
+//		mock.ExpectPrepare(expectedSQL)
+//		mock.ExpectExec(expectedSQL).
+//			WithArgs("https://example.com", "shortURL").
+//			WillReturnResult(sqlmock.NewResult(1, 1))
+//		mock.ExpectCommit()
+//
+//		batch := []models.BatchItem{
+//			{
+//				CorrelationID: "abcd1234",
+//				OriginalURL:   "https://example.com",
+//				ShortURL:      "shortURL",
+//			},
+//		}
+//
+//		err := pg.SetBatchInStorage(batch)
+//		assert.NoError(t, err)
+//		assert.NoError(t, mock.ExpectationsWereMet())
+//	})
+//}
