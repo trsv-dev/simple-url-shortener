@@ -1,7 +1,9 @@
 package memory
 
 import (
+	"errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/errs"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/models"
 	"strings"
 	"testing"
@@ -23,14 +25,18 @@ func TestMemoryStorage_SetInStorage(t *testing.T) {
 	})
 
 	t.Run("Set duplicated long URL", func(t *testing.T) {
-		shortURL1, err := memoryStorage.SetInStorage("https://example.com")
+		shortURL1, err := memoryStorage.SetInStorage("https://unique.com")
 		assert.NoError(t, err)
 		assert.NotEmpty(t, shortURL1)
-		shortURL2, err := memoryStorage.SetInStorage("https://example.com")
-		assert.NoError(t, err)
-		assert.NotEmpty(t, shortURL2)
 
-		assert.Equal(t, shortURL1, shortURL2)
+		var conflictErr *errs.ErrLongURLConflict
+
+		shortURL2, err := memoryStorage.SetInStorage("https://unique.com")
+		if errors.As(err, &conflictErr) {
+			assert.Equal(t, shortURL1, conflictErr.ShortURL)
+		}
+		assert.Error(t, err)
+		assert.Empty(t, shortURL2)
 	})
 }
 
