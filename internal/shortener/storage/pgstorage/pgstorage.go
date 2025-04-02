@@ -5,8 +5,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/config"
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/errs"
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/generator"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/logger"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/models"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/utils"
@@ -18,7 +21,8 @@ import (
 const length = 8
 
 type PgStorage struct {
-	DB *sql.DB
+	DB        *sql.DB
+	Generator generator.URLGenerator
 }
 
 func InitStorage() (*PgStorage, error) {
@@ -46,7 +50,8 @@ func InitStorage() (*PgStorage, error) {
 	}
 
 	return &PgStorage{
-		DB: postgres,
+		DB:        postgres,
+		Generator: &generator.DefaultGenerator{},
 	}, nil
 }
 
@@ -71,36 +76,52 @@ func (pg *PgStorage) SetInStorage(longURL string) (string, error) {
 		return "", fmt.Errorf("передан невалидный URL")
 	}
 
-	// проверяем, существует ли в БД уже такой longURL
-	existingShortURL, err := pg.IsLongURLExists(longURL)
-	if err != nil {
-		return "", err
-	} else if existingShortURL != "" {
-		return existingShortURL, nil
+	// сначала проверяем — есть ли longURL в базе
+	var existingShortURL string
+	err := pg.DB.QueryRow(`SELECT short_url FROM urls WHERE long_url=$1`, longURL).Scan(&existingShortURL)
+	if err == nil {
+		// URL уже существует
+		conflictErr := errs.NewErrLongURLConflict(longURL, existingShortURL, errors.New("URL уже существует в БД"))
+		return "", conflictErr
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		// Ошибка запроса (не отсутствие строки)
+		return "", fmt.Errorf("ошибка при проверке существующего URL: %v", err)
 	}
 
-	// если не существует - пытаемся сгенерировать для него shortURL и сделать вставку пары в БД
+	// значит err == sql.ErrNoRows — URL не найден запрос вернулся пустым,
+	// идём дальше и пытаемся сгенерировать для него shortURL и сделать вставку пары в БД
 	for attempts := 3; attempts > 0; attempts-- {
 		// генерируем короткий URL
-		shortURL, err := utils.MakeShortURL(length)
+		generatedShortURL, err := pg.Generator.MakeShortURL(length)
 		if err != nil {
 			return "", fmt.Errorf("ошибка при генерации короткого URL: %v", err)
 		}
 
-		// если попытка вставки shortURL удачная - выходим и возвращаем shortURL
-		if _, err = pg.DB.Exec(`INSERT INTO urls (long_url, short_url) VALUES ($1, $2)`, longURL, shortURL); err == nil {
-			return shortURL, nil
+		row := pg.DB.QueryRow(`INSERT INTO urls (long_url, short_url) VALUES ($1, $2)
+									 RETURNING short_url`, longURL, generatedShortURL)
+
+		var returnedShortURL string
+		var pgErr *pgconn.PgError
+
+		err = row.Scan(&returnedShortURL)
+
+		if err != nil {
+			switch {
+			case errors.Is(err, sql.ErrNoRows):
+				// Ошибки отсутствия строки тут быть не должно, но на всякий случай обработаем
+				return "", fmt.Errorf("неожиданная ошибка: запись не была возвращена, %v", err)
+			case errors.As(err, &pgErr) && pgErr.Code == "23505":
+				logger.Log.Info("Коллизия shortURL", zap.String("shortURL", generatedShortURL))
+				continue
+			default:
+				// если ошибка вставки - возвращаем ошибку
+				logger.Log.Info("Ошибка вставки в БД", zap.Error(err))
+				return "", fmt.Errorf("ошибка вставки в БД: %v", err)
+			}
 		}
 
-		// если ошибка - проверяем, является ли ошибка нарушением уникальности поля short_url (дубликат shortURL)
-		if strings.Contains(err.Error(), "duplicate key value") {
-			logger.Log.Info("Коллизия shortURL, пробуем заново", zap.String("shortURL", shortURL))
-			continue
-		}
-
-		// выход по любой другой ошибке
-		logger.Log.Info("Ошибка вставки в БД:", zap.Error(err))
-		return "", fmt.Errorf("ошибка вставки в БД: %v", err)
+		return generatedShortURL, nil
 	}
 
 	// выход после попытки устранения коллизий и невозможности сгенерировать неповторяющийся shortURL
@@ -122,7 +143,7 @@ func (pg *PgStorage) SetBatchInStorage(batch []models.BatchItem) error {
 	// Если все идет штатно, то просто вставляем long_url и сгенерированный short_url.
 	// Если происходит коллизия short_url - откатываем транзакцию.
 	stmt, err := tx.Prepare(`INSERT INTO urls (long_url, short_url) VALUES($1, $2) 
-                                   ON CONFLICT (long_url) DO UPDATE SET short_url=urls.short_url RETURNING short_url `)
+                                   ON CONFLICT (long_url) DO UPDATE SET short_url=urls.short_url RETURNING short_url`)
 	if err != nil {
 		return fmt.Errorf("ошибка подготовки запроса %v ", err)
 	}
@@ -139,28 +160,33 @@ func (pg *PgStorage) SetBatchInStorage(batch []models.BatchItem) error {
 
 		var shortURL string
 
-		generatedShortURL, err := utils.MakeShortURL(length)
+		// генерируем короткий URL
+		generatedShortURL, err := pg.Generator.MakeShortURL(length)
 		if err != nil {
 			return fmt.Errorf("ошибка генерации короткого URL: %v", err)
 		}
 
 		row := stmt.QueryRow(batch[i].OriginalURL, generatedShortURL)
-		if err := row.Scan(&shortURL); err == nil {
-			// Успешная вставка или обновление
-			batch[i].ShortURL = baseURL + "/" + shortURL
-			continue
-		} else {
+		err = row.Scan(&shortURL)
+		if err != nil {
+			switch {
+			// Ошибки отсутствия строки тут быть не должно, но на всякий случай обработаем
+			case errors.Is(err, sql.ErrNoRows):
+				return fmt.Errorf("неожиданная ошибка: запись не была возвращена, %v", err)
 			// если коллизия - продолжаем
-			if strings.Contains(err.Error(), "23505") {
+			case strings.Contains(err.Error(), "23505"):
 				logger.Log.Info("Коллизия shortURL", zap.String("shortURL", generatedShortURL))
-				//return fmt.Errorf("коллизия shortURL: %v", generatedShortURL)
 				continue
-			} else {
-				// если ошибка вставки - откатываем транзакцию
+			// если ошибка вставки - откатываем транзакцию
+			default:
 				logger.Log.Info("Ошибка вставки в БД", zap.Error(err))
 				return fmt.Errorf("ошибка вставки в БД: %v", err)
 			}
 		}
+
+		// Успешная вставка или обновление
+		batch[i].ShortURL = baseURL + "/" + shortURL
+		continue
 	}
 
 	// коммитим транзакцию
@@ -177,10 +203,11 @@ func (pg *PgStorage) GetFromStorage(shortURL string) (string, error) {
 	row := pg.DB.QueryRow(`SELECT long_url FROM urls WHERE short_url = $1`, shortURL)
 	err := row.Scan(&longURL)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
 			logger.Log.Error("короткий адрес не найден в базе данных", zap.String("shortURL", shortURL), zap.String("error", err.Error()))
 			return "", fmt.Errorf("`%v` короткий адрес не найден в базе данных", shortURL)
-		} else {
+		default:
 			return "", fmt.Errorf("`%v` ошибка получения оригинального URL", err)
 		}
 	}

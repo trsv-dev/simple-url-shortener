@@ -2,8 +2,10 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/config"
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/errs"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/models"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/storage"
 	"io"
@@ -23,6 +25,8 @@ func NewAppHandler(s storage.Storage) *AppHandler {
 
 // PostHandler Функция обработки запроса к "/".
 func (h *AppHandler) PostHandler(w http.ResponseWriter, r *http.Request) {
+	baseURL := config.GetServerConfig().BaseURL
+
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -41,12 +45,21 @@ func (h *AppHandler) PostHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	longURL := string(rawURL)
+
 	shortURL, err := h.storage.SetInStorage(longURL)
+	var conflictErr *errs.ErrLongURLConflict
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		return
+		switch {
+		case errors.As(err, &conflictErr):
+			answer := baseURL + "/" + conflictErr.ShortURL
+			w.WriteHeader(http.StatusConflict)
+			w.Write([]byte(answer))
+			return
+		default:
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 	}
-	baseURL := config.GetServerConfig().BaseURL
 	answer := fmt.Sprint(baseURL + "/" + shortURL)
 
 	w.WriteHeader(http.StatusCreated)
@@ -74,6 +87,8 @@ func (h *AppHandler) GetHandler(w http.ResponseWriter, r *http.Request) {
 
 // APIShorten Функция обработки запроса к "/api/shorten"
 func (h *AppHandler) APIShorten(w http.ResponseWriter, r *http.Request) {
+	baseURL := config.GetServerConfig().BaseURL
+
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
@@ -97,18 +112,35 @@ func (h *AppHandler) APIShorten(w http.ResponseWriter, r *http.Request) {
 
 	// помещаем полученный в запросе длинный URL в хранилище
 	shortURL, err := h.storage.SetInStorage(request.URL)
+	var conflictErr *errs.ErrLongURLConflict
 	if err != nil {
-		if err.Error() == "передан невалидный URL" {
+		switch {
+		case errors.As(err, &conflictErr):
+			// если URL уже существует в базе - возвращаем через структуру кастомной ошибки
+			// shortURL, который соответствует этому URL
+			answer := baseURL + "/" + conflictErr.ShortURL
+			response := models.Response{Result: answer}
+			result, err := json.Marshal(response)
+			if err != nil {
+				http.Error(w, "Ошибка кодирования ответа", http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			w.Write(result)
+			return
+		case err.Error() == "передан невалидный URL":
 			http.Error(w, "Некорректный формат URL", http.StatusBadRequest)
-		} else {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		default:
 			http.Error(w, "Ошибка обработки запроса", http.StatusInternalServerError)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
 		}
-
-		return
 	}
 
 	// формируем URL, добавляем к полученному короткому URL адрес сервера
-	baseURL := config.GetServerConfig().BaseURL
 	answer := fmt.Sprint(baseURL + "/" + shortURL)
 
 	response := models.Response{Result: answer}

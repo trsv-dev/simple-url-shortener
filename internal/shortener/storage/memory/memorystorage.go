@@ -1,8 +1,11 @@
 package memory
 
 import (
+	"errors"
 	"fmt"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/config"
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/errs"
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/generator"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/logger"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/models"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/utils"
@@ -22,6 +25,7 @@ type MemoryStorage struct {
 	ID          int
 	LongToShort map[string]string
 	ShortToLong map[string]string
+	Generator   generator.URLGenerator
 	mu          sync.Mutex
 }
 
@@ -34,6 +38,7 @@ func InitStorage() *MemoryStorage {
 		ID:          0,
 		LongToShort: make(map[string]string),
 		ShortToLong: make(map[string]string),
+		Generator:   &generator.DefaultGenerator{},
 	}
 }
 
@@ -45,24 +50,37 @@ func (ms *MemoryStorage) SetInStorage(longURL string) (string, error) {
 	if utils.IsValidURL(longURL) {
 		// проверяем, есть ли он уже в хранилище
 		if shortURL, ok := ms.LongToShort[longURL]; ok {
-			return shortURL, nil
+			//return shortURL, nil
+			conflictErr := errs.NewErrLongURLConflict(longURL, shortURL, errors.New("URL уже существует в БД"))
+			return "", conflictErr
 		}
 
 		var shortURL string
-		var err error
+
 		// если нет - генерируем новый shortURL, если коллизии и не получается за три попытки, то пропускаем,
 		// shortURL при этом будет пустым
 		for attempt := 0; attempt < 3; attempt++ {
 			// генерируем короткий URL
-			shortURL, err = utils.MakeShortURL(length)
+			generatedShortURL, err := ms.Generator.MakeShortURL(length)
 			if err != nil {
 				return "", fmt.Errorf("ошибка при генерации короткого URL: %v", err)
 			}
-			if _, err = ms.GetFromStorage(shortURL); err == nil {
+			if _, err = ms.GetFromStorage(generatedShortURL); err == nil {
+				logger.Log.Info("Коллизия shortURL, пробуем заново", zap.String("shortURL", generatedShortURL))
 				continue
 			}
+
+			// если не произошло ошибки при генерации и generatedShortURL не был найден в БД,
+			// присваиваем его значение shortURL и выходим из цикла
+			shortURL = generatedShortURL
 			break
 		}
+
+		if shortURL == "" {
+			logger.Log.Error("невозможно сгенерировать уникальный shortURL, возможны коллизии")
+			return "", fmt.Errorf("невозможно сгенерировать уникальный shortURL, возможны коллизии")
+		}
+
 		ms.LongToShort[longURL], ms.ShortToLong[shortURL] = shortURL, longURL
 		ms.ID++
 
@@ -98,7 +116,7 @@ func (ms *MemoryStorage) SetBatchInStorage(batch []models.BatchItem) error {
 		// shortURL при этом будет пустым
 		for attempt := 0; attempt < 3; attempt++ {
 			// генерируем короткий URL
-			shortURL, err = utils.MakeShortURL(length)
+			shortURL, err = ms.Generator.MakeShortURL(length)
 			if err != nil {
 				return fmt.Errorf("ошибка при генерации короткого URL: %v", err)
 			}

@@ -6,9 +6,44 @@ import (
 	"errors"
 	"fmt"
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/assert"
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/errs"
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/models"
+	"regexp"
 	"testing"
 )
+
+// Мок-генератор, который либо возвращает заданную ошибку, либо заданный shortURL
+type MockGenerator struct {
+	shortURL string
+	err      error
+	urls     []string
+	call     int
+}
+
+// Метод мок-генератора
+func (mg *MockGenerator) MakeShortURL(length int) (string, error) {
+	// если при инициализации структуры передана ошибка - возвращаем ошибку
+	if mg.err != nil {
+		return "", mg.err
+	}
+
+	// если при инициализации структуры передан список коротких URL - возвращаем их по одному
+	// и считаем их оставшееся количество когда выдаем для разных запросов
+	if len(mg.urls) > 0 {
+		if mg.call < len(mg.urls) {
+			url := mg.urls[mg.call]
+			mg.call++
+			return url, nil
+		}
+		// Если закончились подготовленные URL
+		return "", fmt.Errorf("нет больше shortURL в списке")
+	}
+
+	// если при инициализации структуры передан shortURL - возвращаем shortURL
+	return mg.shortURL, nil
+}
 
 func TestPgStorage_Ping_WithMock(t *testing.T) {
 	db, mock, err := sqlmock.New(sqlmock.MonitorPingsOption(true)) // Включаем мониторинг Ping()
@@ -116,7 +151,10 @@ func TestPgStorage_SetInStorage(t *testing.T) {
 	assert.NoError(t, err)
 	defer db.Close()
 
-	pg := &PgStorage{DB: db}
+	pg := &PgStorage{
+		DB:        db,
+		Generator: &MockGenerator{}, // моковый генератор коротких URL
+	}
 
 	t.Run("Invalid URL", func(t *testing.T) {
 		shortURL, err := pg.SetInStorage("invalid-url")
@@ -128,29 +166,161 @@ func TestPgStorage_SetInStorage(t *testing.T) {
 	})
 
 	t.Run("URL already in DB", func(t *testing.T) {
-		mock.ExpectQuery(`SELECT short_url FROM urls WHERE long_url = \$1`).WithArgs("https://example.com").
-			WillReturnRows(sqlmock.NewRows([]string{"shortURL"}).AddRow("abcd1234"))
+		query := `SELECT short_url FROM urls WHERE long_url=$1`
 
-		shortURL, err := pg.SetInStorage("https://example.com")
-		assert.NoError(t, err)
-		assert.Equal(t, "abcd1234", shortURL)
+		// Мокаем поведение: SELECT возвращает существующий shortURL
+		mock.ExpectQuery(regexp.QuoteMeta(query)).
+			WithArgs("https://example.com").
+			WillReturnRows(sqlmock.NewRows([]string{"short_url"}).AddRow("abcd1234"))
+
+		_, err := pg.SetInStorage("https://example.com")
+
+		var conflictErr *errs.ErrLongURLConflict
+		if assert.ErrorAs(t, err, &conflictErr) {
+			assert.Equal(t, "abcd1234", conflictErr.ShortURL)
+		} else {
+			t.Errorf("ожидалась ошибка ErrLongURLConflict, но получили: %v", err)
+		}
 
 		assert.NoError(t, mock.ExpectationsWereMet())
 	})
 
-	t.Run("DB insert error", func(t *testing.T) {
-		longURL := "https://example.com"
+	t.Run("Normal URL insertion", func(t *testing.T) {
+		selectQuery := `SELECT short_url FROM urls WHERE long_url=$1`
+		insertQuery := `INSERT INTO urls (long_url, short_url) VALUES ($1, $2) RETURNING short_url`
 
-		// Мокируем проверку существования URL (он отсутствует)
-		mock.ExpectQuery(`SELECT short_url FROM urls WHERE long_url = \$1`).
+		// Мокаем SELECT — вернёт sql.ErrNoRows, значит URL ещё нет в БД
+		mock.ExpectQuery(regexp.QuoteMeta(selectQuery)).
 			WithArgs("https://example.com").
-			WillReturnRows(sqlmock.NewRows([]string{"short_url"})) // Пустой результат
+			WillReturnError(sql.ErrNoRows)
 
-		// Ожидаем, что любая попытка вставки вызовет ошибку (имитируем падение БД)
-		mock.ExpectExec(`INSERT INTO urls`).WithArgs(longURL, sqlmock.AnyArg()).
-			WillReturnError(fmt.Errorf("произошла ошибка вставки в БД"))
+		// Предположим, что сгенерированный shortURL будет "abc12345"
+		expectedShortURL := "abcd1234"
+		pg.Generator = &MockGenerator{shortURL: "abcd1234"}
 
-		shortURL, err := pg.SetInStorage(longURL)
+		// Мокаем INSERT с возвращаемым значением
+		mock.ExpectQuery(regexp.QuoteMeta(insertQuery)).
+			WithArgs("https://example.com", expectedShortURL).
+			WillReturnRows(sqlmock.NewRows([]string{"short_url"}).AddRow(expectedShortURL))
+
+		shortURL, err := pg.SetInStorage("https://example.com")
+		assert.NoError(t, err)
+		assert.Equal(t, expectedShortURL, shortURL)
+
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("Return error if error in SetInStorage()", func(t *testing.T) {
+		selectQuery := `SELECT short_url FROM urls WHERE long_url=$1`
+
+		// Мокаем SELECT — вернёт sql.ErrNoRows, значит URL ещё нет в БД
+		mock.ExpectQuery(regexp.QuoteMeta(selectQuery)).
+			WithArgs("https://example.com").
+			WillReturnError(sql.ErrNoRows)
+
+		// Мок-генератор, который сразу возвращает ошибку
+		pg.Generator = &MockGenerator{err: sql.ErrConnDone}
+
+		// Вызов SetInStorage
+		shortURL, err := pg.SetInStorage("https://example.com")
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "ошибка при генерации короткого URL")
+		assert.Empty(t, shortURL)
+
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("Return error if SELECT query fails", func(t *testing.T) {
+		selectQuery := `SELECT short_url FROM urls WHERE long_url=$1`
+
+		// Мокаем SELECT — вернёт sql.ErrNoRows, значит URL ещё нет в БД
+		mock.ExpectQuery(regexp.QuoteMeta(selectQuery)).
+			WithArgs("https://example.com").
+			WillReturnError(sql.ErrConnDone)
+
+		// Вызов SetInStorage
+		shortURL, err := pg.SetInStorage("https://example.com")
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "ошибка при проверке существующего URL")
+		assert.Empty(t, shortURL)
+
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("Return sql.ErrNoRows error if INSERT query fails", func(t *testing.T) {
+		selectQuery := `SELECT short_url FROM urls WHERE long_url=$1`
+		insertQuery := `INSERT INTO urls (long_url, short_url) VALUES ($1, $2) RETURNING short_url`
+
+		// Мокаем SELECT — вернёт sql.ErrNoRows, значит URL ещё нет в БД
+		mock.ExpectQuery(regexp.QuoteMeta(selectQuery)).
+			WithArgs("https://example.com").
+			WillReturnError(sql.ErrNoRows)
+
+		// Предположим, что сгенерированный shortURL будет "abc12345"
+		expectedShortURL := "abcd1234"
+		pg.Generator = &MockGenerator{shortURL: "abcd1234"}
+
+		// Мокаем INSERT с возвращаемым значением
+		mock.ExpectQuery(regexp.QuoteMeta(insertQuery)).
+			WithArgs("https://example.com", expectedShortURL).
+			WillReturnError(sql.ErrNoRows)
+
+		shortURL, err := pg.SetInStorage("https://example.com")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "неожиданная ошибка: запись не была возвращена")
+		assert.Empty(t, shortURL)
+
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("Handle shortURL collision (code 23505)", func(t *testing.T) {
+		selectQuery := `SELECT short_url FROM urls WHERE long_url=$1`
+		insertQuery := `INSERT INTO urls (long_url, short_url) VALUES ($1, $2) RETURNING short_url`
+
+		// Мокаем SELECT — вернёт sql.ErrNoRows, значит URL ещё нет в БД
+		mock.ExpectQuery(regexp.QuoteMeta(selectQuery)).
+			WithArgs("https://example.com").
+			WillReturnError(sql.ErrNoRows)
+
+		pgErr := &pgconn.PgError{Code: "23505"}
+
+		// Первая попытка вставки должна завершиться коллизией
+		mock.ExpectQuery(regexp.QuoteMeta(insertQuery)).
+			WithArgs("https://example.com", "abc12345").
+			WillReturnError(pgErr)
+
+		// После коллизии должна быть вторая попытка вставки
+		mock.ExpectQuery(regexp.QuoteMeta(insertQuery)).
+			WithArgs("https://example.com", "xyz98765").
+			WillReturnRows(sqlmock.NewRows([]string{"short_url"}).AddRow("xyz98765"))
+
+		pg.Generator = &MockGenerator{urls: []string{"abc12345", "xyz98765"}}
+
+		shortURL, err := pg.SetInStorage("https://example.com")
+
+		assert.NoError(t, err)
+		assert.Equal(t, "xyz98765", shortURL)
+
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("Return error if INSERT fails with unknown error", func(t *testing.T) {
+		selectQuery := `SELECT short_url FROM urls WHERE long_url=$1`
+		insertQuery := `INSERT INTO urls (long_url, short_url) VALUES ($1, $2) RETURNING short_url`
+
+		mock.ExpectQuery(regexp.QuoteMeta(selectQuery)).
+			WithArgs("https://example.com").
+			WillReturnError(sql.ErrNoRows)
+
+		mock.ExpectQuery(regexp.QuoteMeta(insertQuery)).
+			WithArgs("https://example.com", "abc12345").
+			WillReturnError(sql.ErrTxDone)
+
+		pg.Generator = &MockGenerator{shortURL: "abc12345"}
+
+		shortURL, err := pg.SetInStorage("https://example.com")
 
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "ошибка вставки в БД")
@@ -159,67 +329,113 @@ func TestPgStorage_SetInStorage(t *testing.T) {
 		assert.NoError(t, mock.ExpectationsWereMet())
 	})
 
-	t.Run("Return shortURL from storage", func(t *testing.T) {
-		mock.ExpectQuery(`SELECT short_url FROM urls WHERE long_url = \$1`).
-			WithArgs("https://example.com").
-			WillReturnRows(sqlmock.NewRows([]string{"short_url"}))
+	t.Run("Return from `SetInStorage` with collision (code 23505)", func(t *testing.T) {
+		selectQuery := `SELECT short_url FROM urls WHERE long_url=$1`
+		insertQuery := `INSERT INTO urls (long_url, short_url) VALUES ($1, $2) RETURNING short_url`
 
-		mock.ExpectExec(`INSERT INTO urls`).WithArgs("https://example.com", sqlmock.AnyArg()).
-			WillReturnResult(sqlmock.NewResult(1, 1))
+		// Мокаем SELECT — вернёт sql.ErrNoRows, значит URL ещё нет в БД
+		mock.ExpectQuery(regexp.QuoteMeta(selectQuery)).
+			WithArgs("https://example.com").
+			WillReturnError(sql.ErrNoRows)
+
+		pgErr := &pgconn.PgError{Code: "23505"}
+
+		// Первая попытка вставки должна завершиться коллизией
+		mock.ExpectQuery(regexp.QuoteMeta(insertQuery)).
+			WithArgs("https://example.com", "abc12345").
+			WillReturnError(pgErr)
+
+		// Вторая попытка вставки должна завершиться коллизией
+		mock.ExpectQuery(regexp.QuoteMeta(insertQuery)).
+			WithArgs("https://example.com", "xyz98765").
+			WillReturnError(pgErr)
+
+		// Третья попытка вставки должна завершиться коллизией
+		mock.ExpectQuery(regexp.QuoteMeta(insertQuery)).
+			WithArgs("https://example.com", "qwer1234").
+			WillReturnError(pgErr)
+
+		pg.Generator = &MockGenerator{urls: []string{"abc12345", "xyz98765", "qwer1234", "asdf5678"}}
 
 		shortURL, err := pg.SetInStorage("https://example.com")
-		assert.NoError(t, err)
-		assert.Equal(t, length, len(shortURL))
 
-		assert.NoError(t, mock.ExpectationsWereMet())
-	})
-
-	t.Run("Return error if error in SetInStorage()", func(t *testing.T) {
-		mock.ExpectQuery(`SELECT short_url FROM urls WHERE long_url = \$1`).WithArgs("https://error.com").
-			WillReturnError(fmt.Errorf("ошибка базы данных"))
-
-		_, err := pg.SetInStorage("https://error.com")
 		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "невозможно сгенерировать уникальный shortURL, возможны коллизии")
+		assert.Empty(t, shortURL)
 
 		assert.NoError(t, mock.ExpectationsWereMet())
 	})
 }
 
-//func TestPgStorage_SetBatchInStorage(t *testing.T) {
-//	db, mock, err := sqlmock.New()
-//	require.NoError(t, err)
-//	defer db.Close()
-//
-//	pg := PgStorage{DB: db}
-//
-//	t.Run("Valid shortURL", func(t *testing.T) {
-//		mock.ExpectBegin()
-//
-//		// Используем регулярное выражение для игнорирования пробелов
-//		expectedSQL := regexp.QuoteMeta(`
-//            INSERT INTO urls (long_url, short_url)
-//            VALUES ($1, $2)
-//            ON CONFLICT (long_url)
-//            DO UPDATE SET short_url=urls.short_url
-//            RETURNING short_url
-//        `)
-//
-//		mock.ExpectPrepare(expectedSQL)
-//		mock.ExpectExec(expectedSQL).
-//			WithArgs("https://example.com", "shortURL").
-//			WillReturnResult(sqlmock.NewResult(1, 1))
-//		mock.ExpectCommit()
-//
-//		batch := []models.BatchItem{
-//			{
-//				CorrelationID: "abcd1234",
-//				OriginalURL:   "https://example.com",
-//				ShortURL:      "shortURL",
-//			},
-//		}
-//
-//		err := pg.SetBatchInStorage(batch)
-//		assert.NoError(t, err)
-//		assert.NoError(t, mock.ExpectationsWereMet())
-//	})
-//}
+func TestPgStorage_SetBatchInStorage(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	assert.NoError(t, err)
+	defer db.Close()
+
+	pg := &PgStorage{
+		DB:        db,
+		Generator: &MockGenerator{}, // моковый генератор коротких URL
+	}
+
+	t.Run("All valid URLs inserted successfully", func(t *testing.T) {
+		mock.ExpectBegin()
+
+		insertQuery := `INSERT INTO urls (long_url, short_url) VALUES($1, $2) 
+                    ON CONFLICT (long_url) DO UPDATE SET short_url=urls.short_url RETURNING short_url`
+
+		mock.ExpectPrepare(regexp.QuoteMeta(insertQuery))
+
+		mock.ExpectQuery(regexp.QuoteMeta(insertQuery)).
+			WithArgs("https://example.com/1", "abcd1234").
+			WillReturnRows(sqlmock.NewRows([]string{"short_url"}).AddRow("abcd1234"))
+
+		mock.ExpectQuery(regexp.QuoteMeta(insertQuery)).
+			WithArgs("https://example.com/2", "efgh5678").
+			WillReturnRows(sqlmock.NewRows([]string{"abcd1234"}).AddRow("efgh5678"))
+
+		mock.ExpectCommit()
+
+		pg.Generator = &MockGenerator{urls: []string{"abcd1234", "efgh5678"}}
+
+		batch := []models.BatchItem{
+			{OriginalURL: "https://example.com/1"},
+			{OriginalURL: "https://example.com/2"},
+		}
+
+		err := pg.SetBatchInStorage(batch)
+		assert.NoError(t, err)
+		assert.Equal(t, "http://localhost:8080/abcd1234", batch[0].ShortURL)
+		assert.Equal(t, "http://localhost:8080/efgh5678", batch[1].ShortURL)
+
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("All valid URLs inserted successfully, invalid don't insert", func(t *testing.T) {
+		mock.ExpectBegin()
+
+		insertQuery := `INSERT INTO urls (long_url, short_url) VALUES($1, $2) 
+                    ON CONFLICT (long_url) DO UPDATE SET short_url=urls.short_url RETURNING short_url`
+
+		mock.ExpectPrepare(regexp.QuoteMeta(insertQuery))
+
+		mock.ExpectQuery(regexp.QuoteMeta(insertQuery)).
+			WithArgs("https://example.com/1", "abcd1234").
+			WillReturnRows(sqlmock.NewRows([]string{"short_url"}).AddRow("abcd1234"))
+
+		mock.ExpectCommit()
+
+		pg.Generator = &MockGenerator{urls: []string{"abcd1234"}}
+
+		batch := []models.BatchItem{
+			{OriginalURL: "https://example.com/1"},
+			{OriginalURL: "example/2"},
+		}
+
+		err := pg.SetBatchInStorage(batch)
+		assert.NoError(t, err)
+		assert.Equal(t, "http://localhost:8080/abcd1234", batch[0].ShortURL)
+		assert.Empty(t, batch[1].ShortURL)
+
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+}

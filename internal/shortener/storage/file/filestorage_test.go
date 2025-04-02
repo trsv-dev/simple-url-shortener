@@ -5,6 +5,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/config"
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/errs"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/models"
 	"io"
 	"os"
@@ -102,19 +103,31 @@ func TestFileStorage_SetInStorage(t *testing.T) {
 	})
 
 	t.Run("Set duplicated long URL", func(t *testing.T) {
-		shortURL1, err := storage.SetInStorage("https://example.com")
+		// сохраняем первый URL, ошибок быть не должно
+		shortURL1, err := storage.SetInStorage("https://unique.com")
 		assert.NoError(t, err)
 		assert.NotEmpty(t, shortURL1)
-		shortURL2, err := storage.SetInStorage("https://example.com")
-		assert.NoError(t, err)
-		assert.NotEmpty(t, shortURL2)
+		// сохраняем точно такой же второй URL, должна быть ошибка и пустое значение shortURL2
+		shortURL2, err := storage.SetInStorage("https://unique.com")
 
-		assert.Equal(t, shortURL1, shortURL2)
+		// Проверяем, что вернулась ошибка конфликта URL
+		var conflictErr *errs.ErrLongURLConflict
+
+		if assert.ErrorAs(t, err, &conflictErr) {
+			assert.Equal(t, shortURL1, conflictErr.ShortURL) // Проверяем, что ошибка содержит верный shortURL
+		} else {
+			t.Errorf("ожидалась ошибка ErrLongURLConflict, но получили: %v", err)
+		}
+
+		assert.Error(t, err)
+		assert.Empty(t, shortURL2)
+
+		assert.Equal(t, shortURL1, conflictErr.ShortURL)
 	})
 
 	// Проверка записи в файловую БД через SetInStorage()
 	t.Run("Checking the created record in the fileDB", func(t *testing.T) {
-		shortURL, err := storage.SetInStorage("https://example.com")
+		shortURL, err := storage.SetInStorage("https://test.com")
 		assert.NoError(t, err)
 
 		file, err := os.Open(config.GetServerConfig().FileDB)
@@ -124,7 +137,7 @@ func TestFileStorage_SetInStorage(t *testing.T) {
 		require.NoError(t, err)
 		require.Contains(t, string(data), `"uuid":"1"`)
 		require.Contains(t, string(data), fmt.Sprintf(`"short_url":"%v"`, shortURL))
-		require.Contains(t, string(data), `"long_url":"https://example.com"`)
+		require.Contains(t, string(data), `"long_url":"https://test.com"`)
 	})
 }
 
