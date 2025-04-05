@@ -29,7 +29,7 @@ func TestNewServer(t *testing.T) {
 	}()
 
 	// Даем серверу немного времени на запуск
-	time.Sleep(5 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 
 	// Пробуем отправить простой запрос, чтобы убедиться, что сервер работает
 	resp, err := http.Get("http://127.0.0.1:8080")
