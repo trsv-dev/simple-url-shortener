@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"github.com/stretchr/testify/assert"
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/contextkeys"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/models"
 	"io"
 	"net/http"
@@ -26,8 +28,27 @@ type MockStorage struct {
 	mockData map[string]string
 }
 
+// GetUserURLs Абстрактный метод для удовлетворения интерфейсу Storage.
+func (ms *MockStorage) GetUserURLs(ctx context.Context) ([]models.BatchItem, error) {
+
+	if ctx.Value("User_ID") != "" {
+		var batch []models.BatchItem
+
+		item := models.BatchItem{
+			OriginalURL: "https://example.com",
+			ShortURL:    "abcd1234",
+		}
+
+		batch = append(batch, item)
+
+		return batch, nil
+	}
+
+	return nil, fmt.Errorf("ошибка получения url")
+}
+
 // Абстрактный метод для удовлетворения интерфейсу Storage.
-func (ms *MockStorage) Ping() error {
+func (ms *MockStorage) Ping(ctx context.Context) error {
 	return nil
 }
 
@@ -37,7 +58,7 @@ func (ms *MockStorage) Close() error {
 }
 
 // Абстрактный метод для удовлетворения интерфейсу Storage.
-func (ms *MockStorage) SetBatchInStorage(batch []models.BatchItem) error {
+func (ms *MockStorage) SetBatchInStorage(ctx context.Context, batch []models.BatchItem) error {
 	// Имитируем процесс сокращения URL и добавления его в структуру batch
 	for i := range batch {
 		if batch[i].OriginalURL != "" {
@@ -50,7 +71,7 @@ func (ms *MockStorage) SetBatchInStorage(batch []models.BatchItem) error {
 	return nil // Возвращаем nil, чтобы тест проходил успешно
 }
 
-func (ms *MockStorage) SetInStorage(longURL string) (string, error) {
+func (ms *MockStorage) SetInStorage(ctx context.Context, longURL string) (string, error) {
 	if longURL == "https://invalid-example.com" || longURL == "" {
 		return "", errors.New("передан невалидный URL")
 	}
@@ -62,7 +83,7 @@ func (ms *MockStorage) SetInStorage(longURL string) (string, error) {
 	return ms.mockData[longURL], nil
 }
 
-func (ms *MockStorage) GetFromStorage(shortURL string) (string, error) {
+func (ms *MockStorage) GetFromStorage(ctx context.Context, shortURL string) (string, error) {
 	value, ok := ms.mockData[shortURL]
 	if !ok {
 		return "", fmt.Errorf("`%v` не найден в базе данных", shortURL)
@@ -77,7 +98,7 @@ type PingError struct {
 	pingErr     error
 }
 
-func (p *PingError) Ping() error {
+func (p *PingError) Ping(ctx context.Context) error {
 	return p.pingErr
 }
 
@@ -314,6 +335,71 @@ func TestAppHandler_Batch(t *testing.T) {
 
 			assert.Equal(t, tt.expectedStatus, res.StatusCode)
 			assert.Equal(t, tt.expectedData, w.Body.String())
+		})
+	}
+}
+
+func TestAppHandler_UserURLs(t *testing.T) {
+	mockStorage := &MockStorage{
+		mockData: map[string]string{"https://example.com": "shortURL"},
+	}
+
+	h := NewAppHandler(mockStorage)
+	URL := "/api/user/urls"
+
+	tests := []struct {
+		name           string
+		method         string
+		userID         any // Можно string или nil
+		expectedStatus int
+		expectedBody   string
+	}{
+		{
+			name:           "Get user urls",
+			method:         http.MethodGet,
+			userID:         "123", // значение не проверяется, но наличие важно
+			expectedStatus: http.StatusOK,
+			expectedBody:   `[{"original_url":"https://example.com","short_url":"abcd1234"}]`,
+		},
+		{
+			name:           "Get no error when user_id is empty",
+			method:         http.MethodGet,
+			userID:         "", // имитируем пустого пользователя
+			expectedStatus: http.StatusOK,
+			expectedBody:   "", // тело не важно
+		},
+		{
+			name:           "Invalid method",
+			method:         http.MethodPost,
+			userID:         "123",
+			expectedStatus: http.StatusBadRequest,
+			expectedBody:   "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(tt.method, URL, nil)
+
+			// добавляем контекст, если явно указан userID
+			if tt.userID != nil {
+				ctx := context.WithValue(req.Context(), contextkeys.UserID, tt.userID)
+				req = req.WithContext(ctx)
+			}
+
+			w := httptest.NewRecorder()
+			h.UserURLs(w, req)
+
+			res := w.Result()
+			defer res.Body.Close()
+
+			body, _ := io.ReadAll(res.Body)
+
+			assert.Equal(t, tt.expectedStatus, res.StatusCode)
+
+			if tt.expectedBody != "" {
+				assert.JSONEq(t, tt.expectedBody, string(body))
+			}
 		})
 	}
 }
