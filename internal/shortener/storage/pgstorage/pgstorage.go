@@ -7,15 +7,20 @@ import (
 	"fmt"
 	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/contextkeys"
+	"go.uber.org/zap"
+	"strings"
+	"time"
+
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
+
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/config"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/errs"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/generator"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/logger"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/models"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/utils"
-	"go.uber.org/zap"
-	"strings"
-	"time"
 )
 
 const length = 8
@@ -35,10 +40,21 @@ func InitStorage() (*PgStorage, error) {
 		return nil, err
 	}
 
+	if err = postgres.Ping(); err != nil {
+		logger.Log.Error("Ошибка при попытке подключения к базе данных", zap.Error(err))
+		return nil, err
+	}
+
+	pgstore := &PgStorage{
+		DB:        postgres,
+		Generator: &generator.DefaultGenerator{},
+	}
+
 	query := `CREATE TABLE IF NOT EXISTS urls (
 			id SERIAL PRIMARY KEY,
 			long_url TEXT NOT NULL UNIQUE,
-			short_url VARCHAR(250) NOT NULL UNIQUE
+			short_url VARCHAR(250) NOT NULL UNIQUE,
+            user_id varchar(36)
 		  );`
 
 	_, err = postgres.Exec(query)
@@ -49,10 +65,7 @@ func InitStorage() (*PgStorage, error) {
 		return nil, err
 	}
 
-	return &PgStorage{
-		DB:        postgres,
-		Generator: &generator.DefaultGenerator{},
-	}, nil
+	return pgstore, nil
 }
 
 func (pg *PgStorage) IsLongURLExists(longURL string) (string, error) {
@@ -71,14 +84,14 @@ func (pg *PgStorage) IsLongURLExists(longURL string) (string, error) {
 	return shortURL, nil
 }
 
-func (pg *PgStorage) SetInStorage(longURL string) (string, error) {
+func (pg *PgStorage) SetInStorage(ctx context.Context, longURL string) (string, error) {
 	if !utils.IsValidURL(longURL) {
 		return "", fmt.Errorf("передан невалидный URL")
 	}
 
 	// сначала проверяем — есть ли longURL в базе
 	var existingShortURL string
-	err := pg.DB.QueryRow(`SELECT short_url FROM urls WHERE long_url=$1`, longURL).Scan(&existingShortURL)
+	err := pg.DB.QueryRowContext(ctx, `SELECT short_url FROM urls WHERE long_url=$1`, longURL).Scan(&existingShortURL)
 	if err == nil {
 		// URL уже существует
 		conflictErr := errs.NewErrLongURLConflict(longURL, existingShortURL, errors.New("URL уже существует в БД"))
@@ -98,8 +111,8 @@ func (pg *PgStorage) SetInStorage(longURL string) (string, error) {
 			return "", fmt.Errorf("ошибка при генерации короткого URL: %v", err)
 		}
 
-		row := pg.DB.QueryRow(`INSERT INTO urls (long_url, short_url) VALUES ($1, $2)
-									 RETURNING short_url`, longURL, generatedShortURL)
+		row := pg.DB.QueryRowContext(ctx, `INSERT INTO urls (long_url, short_url, user_id) VALUES ($1, $2, $3)
+									 RETURNING short_url`, longURL, generatedShortURL, ctx.Value(contextkeys.UserID))
 
 		var returnedShortURL string
 		var pgErr *pgconn.PgError
@@ -129,10 +142,10 @@ func (pg *PgStorage) SetInStorage(longURL string) (string, error) {
 	return "", fmt.Errorf("невозможно сгенерировать уникальный shortURL, возможны коллизии")
 }
 
-func (pg *PgStorage) SetBatchInStorage(batch []models.BatchItem) error {
+func (pg *PgStorage) SetBatchInStorage(ctx context.Context, batch []models.BatchItem) error {
 	baseURL := config.GetServerConfig().BaseURL
 
-	tx, err := pg.DB.Begin()
+	tx, err := pg.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("ошибка создания транзакции %v ", err)
 	}
@@ -142,7 +155,7 @@ func (pg *PgStorage) SetBatchInStorage(batch []models.BatchItem) error {
 	// и возвращаем значение short_url.
 	// Если все идет штатно, то просто вставляем long_url и сгенерированный short_url.
 	// Если происходит коллизия short_url - откатываем транзакцию.
-	stmt, err := tx.Prepare(`INSERT INTO urls (long_url, short_url) VALUES($1, $2) 
+	stmt, err := tx.PrepareContext(ctx, `INSERT INTO urls (long_url, short_url, user_id) VALUES($1, $2, $3) 
                                    ON CONFLICT (long_url) DO UPDATE SET short_url=urls.short_url RETURNING short_url`)
 	if err != nil {
 		return fmt.Errorf("ошибка подготовки запроса %v ", err)
@@ -166,7 +179,7 @@ func (pg *PgStorage) SetBatchInStorage(batch []models.BatchItem) error {
 			return fmt.Errorf("ошибка генерации короткого URL: %v", err)
 		}
 
-		row := stmt.QueryRow(batch[i].OriginalURL, generatedShortURL)
+		row := stmt.QueryRowContext(ctx, batch[i].OriginalURL, generatedShortURL, ctx.Value(contextkeys.UserID))
 		err = row.Scan(&shortURL)
 		if err != nil {
 			switch {
@@ -197,10 +210,10 @@ func (pg *PgStorage) SetBatchInStorage(batch []models.BatchItem) error {
 	return nil
 }
 
-func (pg *PgStorage) GetFromStorage(shortURL string) (string, error) {
+func (pg *PgStorage) GetFromStorage(ctx context.Context, shortURL string) (string, error) {
 	var longURL string
 
-	row := pg.DB.QueryRow(`SELECT long_url FROM urls WHERE short_url = $1`, shortURL)
+	row := pg.DB.QueryRowContext(ctx, `SELECT long_url FROM urls WHERE short_url = $1`, shortURL)
 	err := row.Scan(&longURL)
 	if err != nil {
 		switch {
@@ -215,8 +228,8 @@ func (pg *PgStorage) GetFromStorage(shortURL string) (string, error) {
 	return longURL, nil
 }
 
-func (pg *PgStorage) Ping() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+func (pg *PgStorage) Ping(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, 1*time.Second)
 	defer cancel()
 
 	if err := pg.DB.PingContext(ctx); err != nil {
@@ -229,4 +242,36 @@ func (pg *PgStorage) Ping() error {
 
 func (pg *PgStorage) Close() error {
 	return pg.DB.Close()
+}
+
+func (pg *PgStorage) GetUserURLs(ctx context.Context) ([]models.BatchItem, error) {
+	var urls []models.BatchItem
+	baseURL := config.GetServerConfig().BaseURL
+
+	rows, err := pg.DB.QueryContext(ctx, `SELECT long_url, short_url FROM urls WHERE user_id = $1`, ctx.Value(contextkeys.UserID))
+	if err != nil {
+		logger.Log.Debug("ошибка запроса на получение URL-ов пользователя", zap.String("rows error", err.Error()))
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var url models.BatchItem
+
+		if err := rows.Scan(&url.OriginalURL, &url.ShortURL); err != nil {
+			logger.Log.Debug("ошибка парсинга запроса на получение URL-ов пользователя", zap.String("rows error", err.Error()))
+			return nil, err
+		}
+
+		// добавляем к сокращенному URL базовый URL
+		url.ShortURL = baseURL + "/" + url.ShortURL
+		urls = append(urls, url)
+	}
+
+	err = rows.Err()
+	if err != nil {
+		logger.Log.Error("Ошибка при обработке строк на получение URL-ов пользователя:", zap.Error(err))
+	}
+
+	return urls, nil
 }

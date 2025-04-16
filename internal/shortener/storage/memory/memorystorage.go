@@ -1,9 +1,11 @@
 package memory
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/config"
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/contextkeys"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/errs"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/generator"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/logger"
@@ -25,6 +27,7 @@ type MemoryStorage struct {
 	ID          int
 	LongToShort map[string]string
 	ShortToLong map[string]string
+	UserURLs    map[string][]string
 	Generator   generator.URLGenerator
 	mu          sync.Mutex
 }
@@ -38,11 +41,12 @@ func InitStorage() *MemoryStorage {
 		ID:          0,
 		LongToShort: make(map[string]string),
 		ShortToLong: make(map[string]string),
+		UserURLs:    make(map[string][]string),
 		Generator:   &generator.DefaultGenerator{},
 	}
 }
 
-func (ms *MemoryStorage) SetInStorage(longURL string) (string, error) {
+func (ms *MemoryStorage) SetInStorage(ctx context.Context, longURL string) (string, error) {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 
@@ -65,7 +69,7 @@ func (ms *MemoryStorage) SetInStorage(longURL string) (string, error) {
 			if err != nil {
 				return "", fmt.Errorf("ошибка при генерации короткого URL: %v", err)
 			}
-			if _, err = ms.GetFromStorage(generatedShortURL); err == nil {
+			if _, err = ms.GetFromStorage(ctx, generatedShortURL); err == nil {
 				logger.Log.Info("Коллизия shortURL, пробуем заново", zap.String("shortURL", generatedShortURL))
 				continue
 			}
@@ -81,6 +85,11 @@ func (ms *MemoryStorage) SetInStorage(longURL string) (string, error) {
 			return "", fmt.Errorf("невозможно сгенерировать уникальный shortURL, возможны коллизии")
 		}
 
+		userID, ok := ctx.Value(contextkeys.UserID).(string)
+		if !ok || userID == "" {
+			return "", fmt.Errorf("ID пользователя не найдено в контексте запроса")
+		}
+		ms.UserURLs[userID] = append(ms.UserURLs[userID], shortURL)
 		ms.LongToShort[longURL], ms.ShortToLong[shortURL] = shortURL, longURL
 		ms.ID++
 
@@ -89,7 +98,7 @@ func (ms *MemoryStorage) SetInStorage(longURL string) (string, error) {
 	return "", fmt.Errorf("передан невалидный URL")
 }
 
-func (ms *MemoryStorage) SetBatchInStorage(batch []models.BatchItem) error {
+func (ms *MemoryStorage) SetBatchInStorage(ctx context.Context, batch []models.BatchItem) error {
 	baseURL := config.GetServerConfig().BaseURL
 
 	ms.mu.Lock()
@@ -122,12 +131,17 @@ func (ms *MemoryStorage) SetBatchInStorage(batch []models.BatchItem) error {
 			}
 
 			// проверяем, нет ли коллизии по shortURL
-			if _, err := ms.GetFromStorage(shortURL); err == nil {
+			if _, err := ms.GetFromStorage(ctx, shortURL); err == nil {
 				logger.Log.Info("Коллизия shortURL, пробуем заново", zap.String("shortURL", shortURL))
 				continue
 			}
 
 			// если коллизии нет, то вносим в хранилище и в возвратную структуру батча
+			userID, ok := ctx.Value(contextkeys.UserID).(string)
+			if !ok || userID == "" {
+				return fmt.Errorf("ID пользователя не найдено в контексте запроса")
+			}
+			ms.UserURLs[userID] = append(ms.UserURLs[userID], shortURL)
 			ms.LongToShort[batch[i].OriginalURL], ms.ShortToLong[shortURL] = shortURL, batch[i].OriginalURL
 			ms.ID++
 
@@ -141,7 +155,7 @@ func (ms *MemoryStorage) SetBatchInStorage(batch []models.BatchItem) error {
 }
 
 // GetFromStorage Поиск и возврат найденного длинного URL по переданному короткому URL.
-func (ms *MemoryStorage) GetFromStorage(shortURL string) (string, error) {
+func (ms *MemoryStorage) GetFromStorage(ctx context.Context, shortURL string) (string, error) {
 	if value, ok := ms.ShortToLong[shortURL]; ok {
 		return value, nil
 	}
@@ -149,8 +163,41 @@ func (ms *MemoryStorage) GetFromStorage(shortURL string) (string, error) {
 	return "", fmt.Errorf("`%v` не найден в базе данных", shortURL)
 }
 
+func (ms *MemoryStorage) GetUserURLs(ctx context.Context) ([]models.BatchItem, error) {
+	baseURL := config.GetServerConfig().BaseURL
+
+	// получаем UserID через контекст и приводим его к string
+	userID, ok := ctx.Value(contextkeys.UserID).(string)
+	if !ok || userID == "" {
+		return nil, fmt.Errorf("ID пользователя не найдено в контексте запроса")
+	}
+
+	// создаем переменную с мапой "id: shortURL, shortURL..."
+	userURLs := ms.UserURLs[userID]
+	var batch []models.BatchItem
+
+	// итерируемся по мапе
+	for _, shortURL := range userURLs {
+		// получаем длинные URL зная короткие
+		longURL := ms.ShortToLong[shortURL]
+
+		// создаем объект batchItem, который является соотнесением длинной и короткий ссылок
+		batchItem := models.BatchItem{
+			OriginalURL: longURL,
+			ShortURL:    shortURL,
+		}
+
+		// добавляем к сокращенному URL базовый URL
+		batchItem.ShortURL = baseURL + "/" + shortURL
+		// добавляем batchItem в слайс batch
+		batch = append(batch, batchItem)
+	}
+
+	return batch, nil
+}
+
 // Ping Абстрактный метод для удовлетворения интерфейсу Storage.
-func (ms *MemoryStorage) Ping() error {
+func (ms *MemoryStorage) Ping(ctx context.Context) error {
 	return nil // В памяти нет внешнего ресурса, поэтому всегда "живой"
 }
 

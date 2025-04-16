@@ -1,6 +1,7 @@
 package router
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"github.com/stretchr/testify/assert"
@@ -20,8 +21,13 @@ type MockStorage struct {
 	mockData map[string]string
 }
 
+// GetUserURLs Абстрактный метод для удовлетворения интерфейсу Storage.
+func (ms *MockStorage) GetUserURLs(ctx context.Context) ([]models.BatchItem, error) {
+	return nil, nil
+}
+
 // Абстрактный метод для удовлетворения интерфейсу Storage.
-func (ms *MockStorage) Ping() error {
+func (ms *MockStorage) Ping(ctx context.Context) error {
 	return nil
 }
 
@@ -31,11 +37,11 @@ func (ms *MockStorage) Close() error {
 }
 
 // Абстрактный метод для удовлетворения интерфейсу Storage.
-func (ms *MockStorage) SetBatchInStorage(batch []models.BatchItem) error {
+func (ms *MockStorage) SetBatchInStorage(ctx context.Context, batch []models.BatchItem) error {
 	return nil
 }
 
-func (ms *MockStorage) SetInStorage(longURL string) (string, error) {
+func (ms *MockStorage) SetInStorage(ctx context.Context, longURL string) (string, error) {
 	if longURL == "https://invalid-example.com" || longURL == "" {
 		return "", errors.New("передан невалидный URL")
 	}
@@ -49,7 +55,7 @@ func (ms *MockStorage) SetInStorage(longURL string) (string, error) {
 	return shortURL, nil
 }
 
-func (ms *MockStorage) GetFromStorage(shortURL string) (string, error) {
+func (ms *MockStorage) GetFromStorage(ctx context.Context, shortURL string) (string, error) {
 	value, ok := ms.mockData[shortURL]
 	if !ok {
 		return "", fmt.Errorf("`%v` не найден в базе данных", shortURL)
