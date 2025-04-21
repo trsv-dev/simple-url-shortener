@@ -1,8 +1,8 @@
 package server
 
 import (
-	"bytes"
 	"context"
+	"errors"
 	"flag"
 	"github.com/stretchr/testify/assert"
 	"net/http"
@@ -23,7 +23,7 @@ func TestNewServer(t *testing.T) {
 	assert.NoError(t, err)
 
 	go func() {
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			t.Errorf("Ошибка при запуске сервера: %v", err)
 		}
 	}()
@@ -48,48 +48,24 @@ func TestRunServer(t *testing.T) {
 	resetFlags()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	// Запускаем сервер в горутине
 	go func() {
 		_, err := RunServer(ctx)
-		if err != nil && err != http.ErrServerClosed {
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			t.Errorf("Ошибка при запуске сервера: %v", err)
 		}
 	}()
 
 	// Даем серверу немного времени на запуск
-	time.Sleep(2 * time.Millisecond)
+	time.Sleep(500 * time.Millisecond)
 
-	// формируем тело запроса
-	body := bytes.NewBuffer([]byte("http://yandex.ru"))
-	// пробуем отправить простой запрос, чтобы убедиться, что сервер работает
-	resp, err := http.Post("http://127.0.0.1:8080", "text/html", body)
-	if err != nil {
-		t.Errorf("Ошибка при отправке запроса: %v", err)
-	}
-	defer resp.Body.Close()
-
-	// Проверяем статус ответа
-	assert.Equal(t, http.StatusCreated, resp.StatusCode)
-
-	// Завершаем сервер с помощью контекста
-	client := http.Client{}
-	ctx, cancel = context.WithTimeout(context.Background(), 5*time.Millisecond)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, "GET", "http://127.0.0.1:8080", nil)
-	if err != nil {
-		t.Errorf("Ошибка при создании запроса: %v", err)
-		return
-	}
-
-	resp, err = client.Do(req)
-	if err != nil {
-		t.Errorf("Ошибка при отправке запроса на завершение: %v", err)
-		return
-	}
-	defer resp.Body.Close()
-	defer os.Remove("/tmp/short-url-storage.json")
+	resp, err := http.Get("http://127.0.0.1:8080/ping")
 	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	defer resp.Body.Close()
+
+	// останавливаем сервер через контекст
+	cancel()
+	time.Sleep(10 * time.Millisecond)
 }

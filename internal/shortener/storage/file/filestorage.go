@@ -2,10 +2,12 @@ package file
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/config"
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/contextkeys"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/errs"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/generator"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/logger"
@@ -29,6 +31,7 @@ type FileStorage struct {
 	ID          int
 	LongToShort map[string]string
 	ShortToLong map[string]string
+	UserURLs    map[string][]string
 	Generator   generator.URLGenerator
 	mu          sync.RWMutex
 }
@@ -39,6 +42,7 @@ func InitStorage() *FileStorage {
 		ID:          0,
 		LongToShort: make(map[string]string),
 		ShortToLong: make(map[string]string),
+		UserURLs:    make(map[string][]string),
 		Generator:   &generator.DefaultGenerator{},
 	}
 
@@ -51,7 +55,7 @@ func InitStorage() *FileStorage {
 	return URLs
 }
 
-func (fs *FileStorage) SetInStorage(longURL string) (string, error) {
+func (fs *FileStorage) SetInStorage(ctx context.Context, longURL string) (string, error) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
@@ -73,7 +77,7 @@ func (fs *FileStorage) SetInStorage(longURL string) (string, error) {
 			if err != nil {
 				return "", fmt.Errorf("ошибка при генерации короткого URL: %v", err)
 			}
-			if _, err = fs.GetFromStorage(generatedShortURL); err == nil {
+			if _, err = fs.GetFromStorage(ctx, generatedShortURL); err == nil {
 				logger.Log.Info("Коллизия shortURL, пробуем заново", zap.String("shortURL", generatedShortURL))
 				continue
 			}
@@ -89,12 +93,17 @@ func (fs *FileStorage) SetInStorage(longURL string) (string, error) {
 			return "", fmt.Errorf("невозможно сгенерировать уникальный shortURL, возможны коллизии")
 		}
 
+		userID, ok := ctx.Value(contextkeys.UserID).(string)
+		if !ok || userID == "" {
+			return "", fmt.Errorf("ID пользователя не найдено в контексте запроса")
+		}
+		fs.UserURLs[userID] = append(fs.UserURLs[userID], shortURL)
 		fs.LongToShort[longURL], fs.ShortToLong[shortURL] = shortURL, longURL
 		fs.ID++
 
 		// записываем в файл
 		if fs.IsFileStorageEnabled() {
-			if err := fs.SetEntryToFileDB(strconv.Itoa(fs.ID), shortURL, longURL); err != nil {
+			if err := fs.SetEntryToFileDB(strconv.Itoa(fs.ID), userID, shortURL, longURL); err != nil {
 				return "", fmt.Errorf("ошибка записи в файл %v: %v", config.GetServerConfig().FileDB, err)
 			}
 		}
@@ -104,7 +113,7 @@ func (fs *FileStorage) SetInStorage(longURL string) (string, error) {
 	return "", fmt.Errorf("передан невалидный URL")
 }
 
-func (fs *FileStorage) SetBatchInStorage(batch []models.BatchItem) error {
+func (fs *FileStorage) SetBatchInStorage(ctx context.Context, batch []models.BatchItem) error {
 	baseURL := config.GetServerConfig().BaseURL
 
 	fs.mu.Lock()
@@ -139,12 +148,17 @@ func (fs *FileStorage) SetBatchInStorage(batch []models.BatchItem) error {
 			}
 
 			// проверяем, нет ли коллизии по shortURL
-			if _, err := fs.GetFromStorage(shortURL); err == nil {
+			if _, err := fs.GetFromStorage(ctx, shortURL); err == nil {
 				logger.Log.Info("Коллизия shortURL, пробуем заново", zap.String("shortURL", shortURL))
 				continue
 			}
 
 			// если коллизии нет, то вносим в хранилище и в возвратную структуру батча
+			userID, ok := ctx.Value(contextkeys.UserID).(string)
+			if !ok || userID == "" {
+				return fmt.Errorf("ID пользователя не найдено в контексте запроса")
+			}
+			fs.UserURLs[userID] = append(fs.UserURLs[userID], shortURL)
 			fs.LongToShort[batch[i].OriginalURL], fs.ShortToLong[shortURL] = shortURL, batch[i].OriginalURL
 			fs.ID++
 
@@ -152,7 +166,7 @@ func (fs *FileStorage) SetBatchInStorage(batch []models.BatchItem) error {
 
 			// записываем в файл
 			if fs.IsFileStorageEnabled() {
-				if err := fs.SetEntryToFileDB(strconv.Itoa(fs.ID), shortURL, batch[i].OriginalURL); err != nil {
+				if err := fs.SetEntryToFileDB(strconv.Itoa(fs.ID), userID, shortURL, batch[i].OriginalURL); err != nil {
 					return fmt.Errorf("ошибка записи в файл %v: %v", config.GetServerConfig().FileDB, err)
 				}
 			}
@@ -164,7 +178,7 @@ func (fs *FileStorage) SetBatchInStorage(batch []models.BatchItem) error {
 }
 
 // GetFromStorage Поиск и возврат найденного длинного URL по переданному короткому URL.
-func (fs *FileStorage) GetFromStorage(shortURL string) (string, error) {
+func (fs *FileStorage) GetFromStorage(ctx context.Context, shortURL string) (string, error) {
 	if value, ok := fs.ShortToLong[shortURL]; ok {
 		return value, nil
 	}
@@ -178,7 +192,7 @@ func (fs *FileStorage) IsFileStorageEnabled() bool {
 }
 
 // SetEntryToFileDB Запись переданного длинного URL и сгенерированного короткого URL в файл БД.
-func (fs *FileStorage) SetEntryToFileDB(id, shortURL, longURL string) error {
+func (fs *FileStorage) SetEntryToFileDB(id, userID, shortURL, longURL string) error {
 	// если в конфигурации сервера пустое значение FileDB - выходим из функции
 	if !fs.IsFileStorageEnabled() {
 		return fmt.Errorf("файловое хранилище не задано в конфигурации")
@@ -196,10 +210,12 @@ func (fs *FileStorage) SetEntryToFileDB(id, shortURL, longURL string) error {
 		UUID     string `json:"uuid"`
 		ShortURL string `json:"short_url"`
 		LongURL  string `json:"long_url"`
+		UserID   string `json:"user_id"`
 	}{
 		UUID:     id,
 		ShortURL: shortURL,
 		LongURL:  longURL,
+		UserID:   userID,
 	}
 
 	jsonData, err := json.Marshal(entry)
@@ -269,10 +285,11 @@ func (fs *FileStorage) RestoreFromFileDB() error {
 		}
 		shortURL := entry["short_url"]
 		longURL := entry["long_url"]
+		userID := entry["user_id"]
 
 		// записываем полученные переменные как данные структуры хранения длинных и коротких ссылок (FileStorage)
+		fs.UserURLs[userID] = append(fs.UserURLs[userID], shortURL)
 		fs.LongToShort[longURL], fs.ShortToLong[shortURL] = shortURL, longURL
-
 		if id > fs.ID {
 			fs.ID = id
 		}
@@ -281,8 +298,42 @@ func (fs *FileStorage) RestoreFromFileDB() error {
 	return nil
 }
 
+func (fs *FileStorage) GetUserURLs(ctx context.Context) ([]models.BatchItem, error) {
+	baseURL := config.GetServerConfig().BaseURL
+
+	// получаем UserID через контекст и приводим его к string
+	userID, ok := ctx.Value(contextkeys.UserID).(string)
+	if !ok || userID == "" {
+		return nil, fmt.Errorf("ID пользователя не найдено в контексте запроса")
+	}
+
+	// создаем переменную с мапой "id: shortURL, shortURL..."
+	userURLs := fs.UserURLs[userID]
+	var batch []models.BatchItem
+
+	// итерируемся по мапе
+	for _, shortURL := range userURLs {
+		// получаем длинные URL зная короткие
+		longURL := fs.ShortToLong[shortURL]
+
+		// создаем объект batchItem, который является соотнесением длинной и короткий ссылок
+		batchItem := models.BatchItem{
+			OriginalURL: longURL,
+			ShortURL:    shortURL,
+		}
+
+		// добавляем к сокращенному URL базовый URL
+		batchItem.ShortURL = baseURL + "/" + shortURL
+
+		// добавляем batchItem в слайс batch
+		batch = append(batch, batchItem)
+	}
+
+	return batch, nil
+}
+
 // Ping Абстрактный метод для удовлетворения интерфейсу Storage.
-func (fs *FileStorage) Ping() error {
+func (fs *FileStorage) Ping(ctx context.Context) error {
 	return nil // В памяти нет внешнего ресурса, поэтому всегда "живой"
 }
 

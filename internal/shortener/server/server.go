@@ -2,10 +2,10 @@ package server
 
 import (
 	"context"
+	"errors"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/config"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/handlers"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/logger"
-	"github.com/trsv-dev/simple-url-shortener/internal/shortener/middleware"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/router"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/storage"
 	"go.uber.org/zap"
@@ -36,7 +36,8 @@ func NewServer() (*http.Server, storage.Storage, error) {
 
 	return &http.Server{
 			Addr:    cfg.ServerAddress,
-			Handler: logger.RequestAndResponseLogger(middleware.GzipDecompressorMiddleware(middleware.GzipCompressorMiddleware(mux)))},
+			Handler: mux,
+		},
 		URLs,
 		nil
 }
@@ -48,9 +49,25 @@ func RunServer(ctx context.Context) (storage.Storage, error) {
 		return nil, err
 	}
 
-	if err = server.ListenAndServe(); err != nil {
-		return storage, err
+	// запускаем ListenAndServe() в горутине, чтобы он не блокировал управление на себя и была возможность
+	// отменить его через передаваемый контекст
+	go func() {
+		if err = server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Log.Error("Ошибка запуска сервера", zap.Error(err))
+		}
+	}()
+
+	// ожидаем отмену контекста
+	// тут произойдет блокировка, т.к. происходит чтение из пустого канала
+	// канал остается пустым, пока контекст не передаст в него сигнал завершения работы
+	<-ctx.Done()
+
+	err = server.Shutdown(ctx)
+	if err != nil {
+		logger.Log.Error("Ошибка остановки сервера", zap.Error(err))
+		return nil, err
 	}
 
-	return nil, nil
+	logger.Log.Info("Сервер остановлен")
+	return storage, nil
 }

@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/config"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/errs"
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/logger"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/models"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/storage"
+	"go.uber.org/zap"
 	"io"
 	"net/http"
 	"strings"
@@ -25,6 +27,7 @@ func NewAppHandler(s storage.Storage) *AppHandler {
 
 // PostHandler Функция обработки запроса к "/".
 func (h *AppHandler) PostHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	baseURL := config.GetServerConfig().BaseURL
 
 	if r.Method != http.MethodPost {
@@ -46,7 +49,7 @@ func (h *AppHandler) PostHandler(w http.ResponseWriter, r *http.Request) {
 
 	longURL := string(rawURL)
 
-	shortURL, err := h.storage.SetInStorage(longURL)
+	shortURL, err := h.storage.SetInStorage(ctx, longURL)
 	var conflictErr *errs.ErrLongURLConflict
 	if err != nil {
 		switch {
@@ -68,6 +71,8 @@ func (h *AppHandler) PostHandler(w http.ResponseWriter, r *http.Request) {
 
 // GetHandler Функция обработки запроса к "/{id}".
 func (h *AppHandler) GetHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -75,7 +80,7 @@ func (h *AppHandler) GetHandler(w http.ResponseWriter, r *http.Request) {
 
 	id := strings.TrimPrefix(r.URL.Path, "/")
 
-	value, err := h.storage.GetFromStorage(id)
+	value, err := h.storage.GetFromStorage(ctx, id)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -87,6 +92,7 @@ func (h *AppHandler) GetHandler(w http.ResponseWriter, r *http.Request) {
 
 // APIShorten Функция обработки запроса к "/api/shorten"
 func (h *AppHandler) APIShorten(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	baseURL := config.GetServerConfig().BaseURL
 
 	if r.Method != http.MethodPost {
@@ -111,7 +117,7 @@ func (h *AppHandler) APIShorten(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// помещаем полученный в запросе длинный URL в хранилище
-	shortURL, err := h.storage.SetInStorage(request.URL)
+	shortURL, err := h.storage.SetInStorage(ctx, request.URL)
 	var conflictErr *errs.ErrLongURLConflict
 	if err != nil {
 		switch {
@@ -160,11 +166,13 @@ func (h *AppHandler) APIShorten(w http.ResponseWriter, r *http.Request) {
 
 // Ping При GET-запросе к "/ping" проверяет соединение с базой данных
 func (h *AppHandler) Ping(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	if err := h.storage.Ping(); err != nil {
+	if err := h.storage.Ping(ctx); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -173,6 +181,8 @@ func (h *AppHandler) Ping(w http.ResponseWriter, r *http.Request) {
 
 // Batch Функция обработки пакетных POST-запросов в формате JSON к /api/shorten/batch.
 func (h *AppHandler) Batch(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
@@ -202,7 +212,7 @@ func (h *AppHandler) Batch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = h.storage.SetBatchInStorage(batch)
+	err = h.storage.SetBatchInStorage(ctx, batch)
 	if err != nil {
 		http.Error(w, "", http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
@@ -217,5 +227,32 @@ func (h *AppHandler) Batch(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
+	w.Write(data)
+}
+
+// UserURLs Функция обработки GET-запроса на получение всех сокращенных пользователем URL
+func (h *AppHandler) UserURLs(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	urls, err := h.storage.GetUserURLs(r.Context())
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	data, err := json.Marshal(urls)
+	if err != nil {
+		logger.Log.Debug("ошибка маршаллинга URL-ов пользователя", zap.String("rows error", err.Error()))
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+
+	if len(urls) == 0 {
+		w.WriteHeader(http.StatusNoContent)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
 	w.Write(data)
 }

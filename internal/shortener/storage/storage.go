@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/config"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/logger"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/models"
@@ -16,10 +17,11 @@ import (
 // интерфейса должны обеспечивать необходимую логику для хранения
 // и поиска URL, а также обрабатывать возможные ошибки.
 type Storage interface {
-	SetInStorage(longURL string) (string, error)
-	GetFromStorage(shortURL string) (string, error)
-	SetBatchInStorage(batch []models.BatchItem) error
-	Ping() error
+	SetInStorage(ctx context.Context, longURL string) (string, error)
+	GetFromStorage(ctx context.Context, shortURL string) (string, error)
+	SetBatchInStorage(ctx context.Context, batch []models.BatchItem) error
+	GetUserURLs(ctx context.Context) ([]models.BatchItem, error)
+	Ping(ctx context.Context) error
 	Close() error
 }
 
