@@ -1,9 +1,13 @@
 package memory
 
 import (
+	"context"
 	"errors"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/contextkeys"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/errs"
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/mocks"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/models"
 	"strings"
 	"testing"
@@ -12,26 +16,30 @@ import (
 func TestMemoryStorage_SetInStorage(t *testing.T) {
 	memoryStorage := InitStorage()
 
+	ctx := context.Background()
+	userID := uuid.New().String()
+	ctx = context.WithValue(ctx, contextkeys.UserID, userID)
+
 	t.Run("Set valid long URL", func(t *testing.T) {
-		shortURL, err := memoryStorage.SetInStorage("https://example.com")
+		shortURL, err := memoryStorage.SetInStorage(ctx, "https://example.com")
 		assert.NoError(t, err)
 		assert.NotEmpty(t, shortURL)
 	})
 
 	t.Run("Set invalid long URL", func(t *testing.T) {
-		shortURL, err := memoryStorage.SetInStorage("ht://example")
+		shortURL, err := memoryStorage.SetInStorage(ctx, "ht://example")
 		assert.Error(t, err)
 		assert.Empty(t, shortURL)
 	})
 
 	t.Run("Set duplicated long URL", func(t *testing.T) {
-		shortURL1, err := memoryStorage.SetInStorage("https://unique.com")
+		shortURL1, err := memoryStorage.SetInStorage(ctx, "https://unique.com")
 		assert.NoError(t, err)
 		assert.NotEmpty(t, shortURL1)
 
 		var conflictErr *errs.ErrLongURLConflict
 
-		shortURL2, err := memoryStorage.SetInStorage("https://unique.com")
+		shortURL2, err := memoryStorage.SetInStorage(ctx, "https://unique.com")
 		if errors.As(err, &conflictErr) {
 			assert.Equal(t, shortURL1, conflictErr.ShortURL)
 		}
@@ -43,17 +51,21 @@ func TestMemoryStorage_SetInStorage(t *testing.T) {
 func TestMemoryStorage_GetFromStorage(t *testing.T) {
 	memoryStorage := InitStorage()
 
+	ctx := context.Background()
+	userID := uuid.New().String()
+	ctx = context.WithValue(ctx, contextkeys.UserID, userID)
+
 	t.Run("Get valid shortURL", func(t *testing.T) {
-		shortURL, err := memoryStorage.SetInStorage("https://example.com")
+		shortURL, err := memoryStorage.SetInStorage(ctx, "https://example.com")
 		assert.NoError(t, err)
-		longURL, err := memoryStorage.GetFromStorage(shortURL)
+		longURL, err := memoryStorage.GetFromStorage(ctx, shortURL)
 		assert.NoError(t, err)
 		assert.NotEmpty(t, longURL)
 		assert.Equal(t, "https://example.com", longURL)
 	})
 
 	t.Run("Get invalid shortURL", func(t *testing.T) {
-		longURL, err := memoryStorage.GetFromStorage("invalidShortURL")
+		longURL, err := memoryStorage.GetFromStorage(ctx, "invalidShortURL")
 		assert.Error(t, err)
 		assert.Empty(t, longURL)
 	})
@@ -61,6 +73,10 @@ func TestMemoryStorage_GetFromStorage(t *testing.T) {
 
 func TestMemoryStorage_SetBatchInStorage(t *testing.T) {
 	memoryStorage := InitStorage()
+
+	ctx := context.Background()
+	userID := uuid.New().String()
+	ctx = context.WithValue(ctx, contextkeys.UserID, userID)
 
 	t.Run("Set valid batch", func(t *testing.T) {
 		batch := []models.BatchItem{
@@ -74,7 +90,7 @@ func TestMemoryStorage_SetBatchInStorage(t *testing.T) {
 			},
 		}
 
-		err := memoryStorage.SetBatchInStorage(batch)
+		err := memoryStorage.SetBatchInStorage(ctx, batch)
 		assert.NoError(t, err)
 
 		correlationID1 := "abcd1234"
@@ -85,7 +101,7 @@ func TestMemoryStorage_SetBatchInStorage(t *testing.T) {
 		shortURL := strings.TrimPrefix(batch[0].ShortURL, "http://localhost:8080/")
 
 		// проверяем получение оригинального URL с помощью полученного из батча короткого URL
-		result, err := memoryStorage.GetFromStorage(shortURL)
+		result, err := memoryStorage.GetFromStorage(ctx, shortURL)
 		assert.NoError(t, err)
 		assert.Equal(t, originalURL1, result)
 
@@ -99,5 +115,46 @@ func TestMemoryStorage_SetBatchInStorage(t *testing.T) {
 		assert.Equal(t, length, len(shortURL))
 		// проверяем, что генерируются уникальные короткие URL
 		assert.NotEqual(t, batch[0].ShortURL, batch[1].ShortURL)
+	})
+}
+
+func TestMemoryStorage_GetUserURLs(t *testing.T) {
+	memoryStorage := InitStorage()
+
+	ctx := context.Background()
+	userID := uuid.New().String()
+	ctx = context.WithValue(ctx, contextkeys.UserID, userID)
+
+	t.Run("Get user urls", func(t *testing.T) {
+		memoryStorage.Generator = &mocks.MockGenerator{Urls: []string{"abcd1234", "efgh5678"}}
+
+		expectedBatch := []models.BatchItem{
+			{
+				OriginalURL: "https://example.com",
+				ShortURL:    "http://localhost:8080/abcd1234",
+			},
+			{
+				OriginalURL: "https://example2.com",
+				ShortURL:    "http://localhost:8080/efgh5678",
+			},
+		}
+
+		_, err := memoryStorage.SetInStorage(ctx, "https://example.com")
+		assert.NoError(t, err)
+
+		_, err = memoryStorage.SetInStorage(ctx, "https://example2.com")
+		assert.NoError(t, err)
+
+		batch, err := memoryStorage.GetUserURLs(ctx)
+		assert.NoError(t, err)
+		assert.Equal(t, expectedBatch, batch)
+	})
+
+	t.Run("No UserID in r.Context()", func(t *testing.T) {
+		ctx := context.Background()
+
+		batch, err := memoryStorage.GetUserURLs(ctx)
+		assert.Error(t, err)
+		assert.Nil(t, batch)
 	})
 }

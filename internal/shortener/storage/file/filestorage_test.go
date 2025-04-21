@@ -1,11 +1,15 @@
 package file
 
 import (
+	"context"
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/config"
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/contextkeys"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/errs"
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/mocks"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/models"
 	"io"
 	"os"
@@ -41,6 +45,8 @@ func initTestEnvironment(fileDB *os.File) (*FileStorage, error) {
 
 // Проверка записи в файловую БД через SetEntryToFileDB()
 func TestFileStorage_SetEntryToFileDB(t *testing.T) {
+	userID := uuid.New().String()
+
 	FileDB, err := os.CreateTemp("", "test-short-url-storage.json_*.json")
 	require.NoError(t, err)
 	defer os.Remove(FileDB.Name())
@@ -50,7 +56,7 @@ func TestFileStorage_SetEntryToFileDB(t *testing.T) {
 
 	t.Run("Write entry to file DB", func(t *testing.T) {
 		// кладем в файловую БД некую запись
-		err = storage.SetEntryToFileDB("1", "shortURL", "https://example.com")
+		err = storage.SetEntryToFileDB("1", userID, "shortURL", "https://example.com")
 		require.NoError(t, err)
 
 		//открываем файл БД (потому что он был закрыт в предыдущем тесте)
@@ -75,7 +81,7 @@ func TestFileStorage_SetEntryToFileDB(t *testing.T) {
 		require.NoError(t, os.Mkdir(FileDB.Name(), 0755))
 
 		// Пытаемся выполнить запись
-		err = storage.SetEntryToFileDB("1", "shortURL", "https://example.com")
+		err = storage.SetEntryToFileDB("1", userID, "shortURL", "https://example.com")
 
 		// Функция должна вернуть ошибку
 		require.Error(t, err, "Ожидалась ошибка при записи в недоступный файл")
@@ -83,6 +89,10 @@ func TestFileStorage_SetEntryToFileDB(t *testing.T) {
 }
 
 func TestFileStorage_SetInStorage(t *testing.T) {
+	userID := uuid.New().String()
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, contextkeys.UserID, userID)
+
 	FileDB, err := os.CreateTemp("", "test-short-url-storage.json_*.json")
 	require.NoError(t, err)
 	defer os.Remove(FileDB.Name())
@@ -91,24 +101,24 @@ func TestFileStorage_SetInStorage(t *testing.T) {
 	assert.NoError(t, err)
 
 	t.Run("Set valid long URL", func(t *testing.T) {
-		shortURL, err := storage.SetInStorage("https://example.com")
+		shortURL, err := storage.SetInStorage(ctx, "https://example.com")
 		assert.NoError(t, err)
 		assert.NotEmpty(t, shortURL)
 	})
 
 	t.Run("Set invalid long URL", func(t *testing.T) {
-		shortURL, err := storage.SetInStorage("ht://example")
+		shortURL, err := storage.SetInStorage(ctx, "ht://example")
 		assert.Error(t, err)
 		assert.Empty(t, shortURL)
 	})
 
 	t.Run("Set duplicated long URL", func(t *testing.T) {
 		// сохраняем первый URL, ошибок быть не должно
-		shortURL1, err := storage.SetInStorage("https://unique.com")
+		shortURL1, err := storage.SetInStorage(ctx, "https://unique.com")
 		assert.NoError(t, err)
 		assert.NotEmpty(t, shortURL1)
 		// сохраняем точно такой же второй URL, должна быть ошибка и пустое значение shortURL2
-		shortURL2, err := storage.SetInStorage("https://unique.com")
+		shortURL2, err := storage.SetInStorage(ctx, "https://unique.com")
 
 		// Проверяем, что вернулась ошибка конфликта URL
 		var conflictErr *errs.ErrLongURLConflict
@@ -127,7 +137,7 @@ func TestFileStorage_SetInStorage(t *testing.T) {
 
 	// Проверка записи в файловую БД через SetInStorage()
 	t.Run("Checking the created record in the fileDB", func(t *testing.T) {
-		shortURL, err := storage.SetInStorage("https://test.com")
+		shortURL, err := storage.SetInStorage(ctx, "https://test.com")
 		assert.NoError(t, err)
 
 		file, err := os.Open(config.GetServerConfig().FileDB)
@@ -142,6 +152,10 @@ func TestFileStorage_SetInStorage(t *testing.T) {
 }
 
 func TestMemoryStorage_GetFromStorage(t *testing.T) {
+	userID := uuid.New().String()
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, contextkeys.UserID, userID)
+
 	FileDB, err := os.CreateTemp("", "test-short-url-storage.json_*.json")
 	require.NoError(t, err)
 	defer os.Remove(FileDB.Name())
@@ -150,22 +164,24 @@ func TestMemoryStorage_GetFromStorage(t *testing.T) {
 	assert.NoError(t, err)
 
 	t.Run("Get valid shortURL", func(t *testing.T) {
-		shortURL, err := storage.SetInStorage("https://example.com")
+		shortURL, err := storage.SetInStorage(ctx, "https://example.com")
 		assert.NoError(t, err)
-		longURL, err := storage.GetFromStorage(shortURL)
+		longURL, err := storage.GetFromStorage(ctx, shortURL)
 		assert.NoError(t, err)
 		assert.NotEmpty(t, longURL)
 		assert.Equal(t, "https://example.com", longURL)
 	})
 
 	t.Run("Get invalid shortURL", func(t *testing.T) {
-		longURL, err := storage.GetFromStorage("invalidShortURL")
+		longURL, err := storage.GetFromStorage(ctx, "invalidShortURL")
 		assert.Error(t, err)
 		assert.Empty(t, longURL)
 	})
 }
 
 func TestFileStorage_RestoreFromFileDB(t *testing.T) {
+	userID := uuid.New().String()
+
 	FileDB, err := os.CreateTemp("", "test-short-url-storage.json_*.json")
 	require.NoError(t, err)
 	defer os.Remove(FileDB.Name())
@@ -193,7 +209,7 @@ func TestFileStorage_RestoreFromFileDB(t *testing.T) {
 			LongToShort: make(map[string]string),
 		}
 
-		err := emptyStorage.SetEntryToFileDB("1", "shortURL", "https://example.com")
+		err := emptyStorage.SetEntryToFileDB("1", userID, "shortURL", "https://example.com")
 
 		// Ошибки не должно быть, так как мы просто пропускаем запись в файл
 		assert.Error(t, err)
@@ -254,6 +270,10 @@ func TestFileStorage_RestoreFromFileDB(t *testing.T) {
 }
 
 func TestFileStorage_SetBatchInStorage(t *testing.T) {
+	userID := uuid.New().String()
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, contextkeys.UserID, userID)
+
 	FileDB, err := os.CreateTemp("", "test-short-url-storage.json_*.json")
 	require.NoError(t, err)
 	defer os.Remove(FileDB.Name())
@@ -273,7 +293,7 @@ func TestFileStorage_SetBatchInStorage(t *testing.T) {
 			},
 		}
 
-		err := storage.SetBatchInStorage(batch)
+		err := storage.SetBatchInStorage(ctx, batch)
 		assert.NoError(t, err)
 
 		correlationID1 := "abcd1234"
@@ -284,7 +304,7 @@ func TestFileStorage_SetBatchInStorage(t *testing.T) {
 		shortURL := strings.TrimPrefix(batch[0].ShortURL, "http://localhost:8080/")
 
 		// проверяем получение оригинального URL с помощью полученного из батча короткого URL
-		result, err := storage.GetFromStorage(shortURL)
+		result, err := storage.GetFromStorage(ctx, shortURL)
 		assert.NoError(t, err)
 		assert.Equal(t, originalURL1, result)
 
@@ -298,5 +318,46 @@ func TestFileStorage_SetBatchInStorage(t *testing.T) {
 		assert.Equal(t, length, len(shortURL))
 		// проверяем, что генерируются уникальные короткие URL
 		assert.NotEqual(t, batch[0].ShortURL, batch[1].ShortURL)
+	})
+}
+
+func TestFileStorage_GetUserURLs(t *testing.T) {
+	memoryStorage := InitStorage()
+
+	ctx := context.Background()
+	userID := uuid.New().String()
+	ctx = context.WithValue(ctx, contextkeys.UserID, userID)
+
+	t.Run("Get user urls", func(t *testing.T) {
+		memoryStorage.Generator = &mocks.MockGenerator{Urls: []string{"abcd1234", "efgh5678"}}
+
+		expectedBatch := []models.BatchItem{
+			{
+				OriginalURL: "https://example3.com",
+				ShortURL:    "http://localhost:8080/abcd1234",
+			},
+			{
+				OriginalURL: "https://example4.com",
+				ShortURL:    "http://localhost:8080/efgh5678",
+			},
+		}
+
+		_, err := memoryStorage.SetInStorage(ctx, "https://example3.com")
+		assert.NoError(t, err)
+
+		_, err = memoryStorage.SetInStorage(ctx, "https://example4.com")
+		assert.NoError(t, err)
+
+		batch, err := memoryStorage.GetUserURLs(ctx)
+		assert.NoError(t, err)
+		assert.Equal(t, expectedBatch, batch)
+	})
+
+	t.Run("No UserID in r.Context()", func(t *testing.T) {
+		ctx := context.Background()
+
+		batch, err := memoryStorage.GetUserURLs(ctx)
+		assert.Error(t, err)
+		assert.Nil(t, batch)
 	})
 }
