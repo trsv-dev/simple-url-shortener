@@ -8,6 +8,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/contextkeys"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/errs"
@@ -86,15 +87,30 @@ func TestPgStorage_GetFromStorage(t *testing.T) {
 	defer db.Close()
 
 	pg := &PgStorage{DB: db}
-	query := `SELECT long_url FROM urls WHERE short_url = $1`
+	query := `SELECT long_url, is_deleted FROM urls WHERE short_url = $1`
 
 	t.Run("LongURL in DB", func(t *testing.T) {
 		mock.ExpectQuery(regexp.QuoteMeta(query)).WithArgs("abcd1234").
-			WillReturnRows(sqlmock.NewRows([]string{"long_url"}).AddRow("https://example.com"))
+			WillReturnRows(sqlmock.NewRows([]string{"long_url", "is_deleted"}).AddRow("https://example.com", false))
 
 		longURL, err := pg.GetFromStorage(ctx, "abcd1234")
 		assert.NoError(t, err)
 		assert.Equal(t, "https://example.com", longURL)
+
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("LongURL mark as deleted", func(t *testing.T) {
+		mock.ExpectQuery(regexp.QuoteMeta(query)).WithArgs("abcd1234").
+			WillReturnRows(sqlmock.NewRows([]string{"long_url", "is_deleted"}).AddRow("https://example.com", true))
+
+		_, err = pg.GetFromStorage(ctx, "abcd1234")
+
+		// Проверяем, что ошибка именно типа *ErrURLDeleted
+		var errURLDeleted *errs.ErrURLDeleted
+
+		assert.Error(t, err)
+		assert.ErrorAs(t, err, &errURLDeleted)
 
 		assert.NoError(t, mock.ExpectationsWereMet())
 	})
@@ -441,7 +457,7 @@ func TestPgStorage_GetUserURLs(t *testing.T) {
 	ctx = context.WithValue(ctx, contextkeys.UserID, userID)
 
 	t.Run("Get users urls", func(t *testing.T) {
-		selectQuery := `SELECT long_url, short_url FROM urls WHERE user_id = $1`
+		selectQuery := `SELECT long_url, short_url FROM urls WHERE user_id = $1 AND is_deleted = FALSE`
 
 		// Ожидаем, что результат будет содержать один элемент.
 		expected := []models.BatchItem{
@@ -474,6 +490,80 @@ func TestPgStorage_GetUserURLs(t *testing.T) {
 		assert.Error(t, err)
 
 		assert.Nil(t, urls)
+
+		err = mock.ExpectationsWereMet()
+		assert.NoError(t, err)
+	})
+}
+
+func TestPgStorage_MarkAsDelete(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	assert.NoError(t, err)
+	defer db.Close()
+
+	pg := &PgStorage{
+		DB:        db,
+		Generator: &mocks.MockGenerator{},
+	}
+
+	userID := uuid.New().String()
+	ctx := context.TODO()
+	ctx = context.WithValue(ctx, contextkeys.UserID, userID)
+
+	t.Run("Mark URL as deleted", func(t *testing.T) {
+		urls := []string{"abcd1234"}
+
+		updateQuery := `UPDATE urls SET is_deleted = TRUE WHERE short_url = ANY($1) AND user_id = $2`
+
+		// тестируем через транзакцию
+		mock.ExpectBegin()
+		mock.ExpectExec(regexp.QuoteMeta(updateQuery)).
+			WithArgs(pq.Array(urls), userID).
+			WillReturnResult(sqlmock.NewResult(0, 1)) // 1 строка обновлена
+		// закрываем транзакцию
+		mock.ExpectCommit()
+
+		err = pg.MarkAsDelete(ctx, urls)
+		assert.NoError(t, err)
+
+		err = mock.ExpectationsWereMet()
+		assert.NoError(t, err)
+	})
+}
+
+func TestPgStorage_CleanUp(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	assert.NoError(t, err)
+	defer db.Close()
+
+	pg := &PgStorage{
+		DB:        db,
+		Generator: &mocks.MockGenerator{},
+	}
+
+	userID := uuid.New().String()
+	ctx := context.TODO()
+	ctx = context.WithValue(ctx, contextkeys.UserID, userID)
+
+	t.Run("Clean up deleted URLs", func(t *testing.T) {
+		deleteQuery := `DELETE FROM urls WHERE is_deleted = TRUE`
+
+		mock.ExpectExec(regexp.QuoteMeta(deleteQuery)).WillReturnResult(sqlmock.NewResult(1, 1))
+
+		err = pg.CleanUp(ctx)
+		assert.NoError(t, err)
+
+		err = mock.ExpectationsWereMet()
+		assert.NoError(t, err)
+	})
+
+	t.Run("Error when delete URLs", func(t *testing.T) {
+		deleteQuery := `DELETE FROM urls WHERE is_deleted = TRUE`
+
+		mock.ExpectExec(regexp.QuoteMeta(deleteQuery)).WillReturnError(errors.New("ошибка при удалении URL"))
+
+		err = pg.CleanUp(ctx)
+		assert.Contains(t, err.Error(), "ошибка при удалении URL")
 
 		err = mock.ExpectationsWereMet()
 		assert.NoError(t, err)
