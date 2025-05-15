@@ -34,8 +34,11 @@ func Router(h *handlers.AppHandler) *chi.Mux {
 	// Обработка POST-запросов в формате JSON, содержащих список URL для создания коротких URL.
 	router.Post("/api/shorten/batch", h.Batch)
 
-	// Обработка GET-запроса для получения всех URL, сокращенных пользователем
+	// Обработка GET-запроса для получения всех URL, сокращенных пользователем.
 	router.Get("/api/user/urls", h.UserURLs)
+
+	// Обработка DELETE-запроса для асинхронного удаления списка сокращенных URL, переданных пользователем.
+	router.Delete("/api/user/urls", h.Delete)
 
 	return router
 }

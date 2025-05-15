@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/contextkeys"
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/errs"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/models"
 	"io"
 	"net/http"
@@ -48,6 +49,16 @@ func (ms *MockStorage) GetUserURLs(ctx context.Context) ([]models.BatchItem, err
 }
 
 // Абстрактный метод для удовлетворения интерфейсу Storage.
+func (ms *MockStorage) MarkAsDelete(ctx context.Context, urls []string) error {
+	return nil
+}
+
+// Абстрактный метод для удовлетворения интерфейсу Storage.
+func (ms *MockStorage) CleanUp(ctx context.Context) error {
+	return nil
+}
+
+// Абстрактный метод для удовлетворения интерфейсу Storage.
 func (ms *MockStorage) Ping(ctx context.Context) error {
 	return nil
 }
@@ -85,11 +96,19 @@ func (ms *MockStorage) SetInStorage(ctx context.Context, longURL string) (string
 
 func (ms *MockStorage) GetFromStorage(ctx context.Context, shortURL string) (string, error) {
 	value, ok := ms.mockData[shortURL]
-	if !ok {
+	if !ok && shortURL != "deletedShortURL" && shortURL != "badShortUrl" {
 		return "", fmt.Errorf("`%v` не найден в базе данных", shortURL)
 	}
 
-	return value, nil
+	switch {
+	case shortURL == "deletedShortURL":
+		errURLDeleted := errs.NewErrURLDeleted("deletedShortURL", true, errors.New("URL был помечен как удаленный"))
+		return "", errURLDeleted
+	case shortURL == "badShortUrl":
+		return "", fmt.Errorf("невалидный URL")
+	default:
+		return value, nil
+	}
 }
 
 // Структура, которая имитирует хранилище, выдающее ошибку при обращении к эндпоинту "/ping".
@@ -118,6 +137,7 @@ func TestGetHandler(t *testing.T) {
 		{name: "Invalid (empty) shortURL", requestMethod: http.MethodGet, shortURL: "/", expectedStatus: http.StatusBadRequest},
 		{name: "Invalid (bad) shortURL", requestMethod: http.MethodGet, shortURL: "/badShortUrl", expectedStatus: http.StatusBadRequest},
 		{name: "Valid shortURL", requestMethod: http.MethodGet, shortURL: "/shortURL", expectedStatus: http.StatusTemporaryRedirect, expectedLocation: "https://example.com"},
+		{name: "Mark as deleted shortURL", requestMethod: http.MethodGet, shortURL: "/deletedShortURL", expectedStatus: http.StatusGone},
 		{name: "Invalid Method (POST) with valid shortURL", requestMethod: http.MethodPost, shortURL: "/shortURL", expectedStatus: http.StatusBadRequest},
 		{name: "Invalid Method (DELETE) with valid shortURL", requestMethod: http.MethodDelete, shortURL: "/shortURL", expectedStatus: http.StatusBadRequest},
 		{name: "Invalid Method (DELETE) with valid shortURL", requestMethod: http.MethodPut, shortURL: "/shortURL", expectedStatus: http.StatusBadRequest},
@@ -347,7 +367,7 @@ func TestAppHandler_UserURLs(t *testing.T) {
 	h := NewAppHandler(mockStorage)
 	URL := "/api/user/urls"
 
-	tests := []struct {
+	testTable := []struct {
 		name           string
 		method         string
 		userID         any // Можно string или nil
@@ -372,12 +392,12 @@ func TestAppHandler_UserURLs(t *testing.T) {
 			name:           "Invalid method",
 			method:         http.MethodPost,
 			userID:         "123",
-			expectedStatus: http.StatusBadRequest,
+			expectedStatus: http.StatusMethodNotAllowed,
 			expectedBody:   "",
 		},
 	}
 
-	for _, tt := range tests {
+	for _, tt := range testTable {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest(tt.method, URL, nil)
 
@@ -400,6 +420,42 @@ func TestAppHandler_UserURLs(t *testing.T) {
 			if tt.expectedBody != "" {
 				assert.JSONEq(t, tt.expectedBody, string(body))
 			}
+		})
+	}
+}
+
+func TestAppHandler_Delete(t *testing.T) {
+	mockStorage := &MockStorage{
+		mockData: map[string]string{"https://example.com": "shortURL"},
+	}
+
+	h := NewAppHandler(mockStorage)
+	URL := "/api/user/urls"
+
+	testTable := []struct {
+		name           string
+		method         string
+		shortURL       string
+		expectedStatus int
+	}{
+		{name: "Normal deletion shortURL", method: "DELETE", shortURL: `["shortURL"]`, expectedStatus: http.StatusAccepted},
+		{name: "Error shortURL (not json-formatted)", method: "DELETE", shortURL: `[shortURL]`, expectedStatus: http.StatusInternalServerError},
+	}
+
+	for _, tt := range testTable {
+		t.Run(tt.name, func(t *testing.T) {
+
+			r := httptest.NewRequest(tt.method, URL, strings.NewReader(tt.shortURL))
+			r.Header.Set("Content-Type", "application/json")
+
+			w := httptest.NewRecorder()
+
+			h.Delete(w, r)
+
+			res := w.Result()
+			defer res.Body.Close()
+
+			assert.Equal(t, tt.expectedStatus, res.StatusCode)
 		})
 	}
 }
