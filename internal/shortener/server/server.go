@@ -10,6 +10,7 @@ import (
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/storage"
 	"go.uber.org/zap"
 	"net/http"
+	"time"
 )
 
 func NewServer() (*http.Server, storage.Storage, error) {
@@ -52,8 +53,28 @@ func RunServer(ctx context.Context) (storage.Storage, error) {
 	// запускаем ListenAndServe() в горутине, чтобы он не блокировал управление на себя и была возможность
 	// отменить его через передаваемый контекст
 	go func() {
-		if err = server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Log.Error("Ошибка запуска сервера", zap.Error(err))
+		}
+	}()
+
+	// запускаем горутину, которая через временные промежутки делает удаление помеченных (is_delete=True) URL
+	go func() {
+		ticker := time.NewTicker(3 * time.Minute)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				err = storage.CleanUp(ctx)
+				if err != nil {
+					logger.Log.Error("Ошибка удаления URL", zap.Error(err))
+				}
+
+			case <-ctx.Done():
+				logger.Log.Info("Горутина для фонового удаления URL завершена")
+				return
+			}
 		}
 	}()
 

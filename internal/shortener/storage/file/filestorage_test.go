@@ -2,6 +2,7 @@ package file
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -54,9 +55,19 @@ func TestFileStorage_SetEntryToFileDB(t *testing.T) {
 	storage, err := initTestEnvironment(FileDB)
 	assert.NoError(t, err)
 
+	filePath := FileDB.Name()
+
+	entry := models.Item{
+		UUID:      uuid.New().String(),
+		ShortURL:  "shortURL",
+		LongURL:   "https://example.com",
+		UserID:    userID,
+		IsDeleted: false,
+	}
+
 	t.Run("Write entry to file DB", func(t *testing.T) {
 		// кладем в файловую БД некую запись
-		err = storage.SetEntryToFileDB("1", userID, "shortURL", "https://example.com")
+		err = storage.SetEntryToFileDB(filePath, &entry)
 		require.NoError(t, err)
 
 		//открываем файл БД (потому что он был закрыт в предыдущем тесте)
@@ -64,12 +75,15 @@ func TestFileStorage_SetEntryToFileDB(t *testing.T) {
 		require.NoError(t, err)
 		defer file.Close()
 
-		// читаем данные из файла
+		// читаем данные из файла в структуру returnedEntry чтобы потом сравнить полученную структуру и первоначальную
 		data, err := io.ReadAll(file)
 		require.NoError(t, err)
-		require.Contains(t, string(data), `"uuid":"1"`)
-		require.Contains(t, string(data), `"short_url":"shortURL"`)
-		require.Contains(t, string(data), `"long_url":"https://example.com"`)
+
+		returnedEntry := models.Item{}
+		err = json.Unmarshal(data, &returnedEntry)
+
+		require.NoError(t, err)
+		assert.Equal(t, entry, returnedEntry)
 	})
 
 	t.Run("FileDB write error", func(t *testing.T) {
@@ -81,7 +95,7 @@ func TestFileStorage_SetEntryToFileDB(t *testing.T) {
 		require.NoError(t, os.Mkdir(FileDB.Name(), 0755))
 
 		// Пытаемся выполнить запись
-		err = storage.SetEntryToFileDB("1", userID, "shortURL", "https://example.com")
+		err = storage.SetEntryToFileDB(filePath, &entry)
 
 		// Функция должна вернуть ошибку
 		require.Error(t, err, "Ожидалась ошибка при записи в недоступный файл")
@@ -145,7 +159,7 @@ func TestFileStorage_SetInStorage(t *testing.T) {
 
 		data, err := io.ReadAll(file)
 		require.NoError(t, err)
-		require.Contains(t, string(data), `"uuid":"1"`)
+		//require.Contains(t, string(data), `"uuid":"1"`)
 		require.Contains(t, string(data), fmt.Sprintf(`"short_url":"%v"`, shortURL))
 		require.Contains(t, string(data), `"long_url":"https://test.com"`)
 	})
@@ -180,13 +194,27 @@ func TestMemoryStorage_GetFromStorage(t *testing.T) {
 }
 
 func TestFileStorage_RestoreFromFileDB(t *testing.T) {
-	userID := uuid.New().String()
-
 	FileDB, err := os.CreateTemp("", "test-short-url-storage.json_*.json")
 	require.NoError(t, err)
 	defer os.Remove(FileDB.Name())
 
-	_, err = FileDB.Write([]byte(`{"uuid":"1","short_url":"shortURL","long_url":"https://example.com"}`))
+	filePath := FileDB.Name()
+
+	userID := uuid.New().String()
+	testUUID := uuid.New().String()
+
+	entry := models.Item{
+		UUID:      testUUID,
+		ShortURL:  "shortURL",
+		LongURL:   "https://example.com",
+		UserID:    userID,
+		IsDeleted: false,
+	}
+
+	data, err := json.Marshal(entry)
+	assert.NoError(t, err)
+
+	_, err = FileDB.Write(data)
 	assert.NoError(t, err)
 
 	require.NoError(t, FileDB.Close())
@@ -194,22 +222,19 @@ func TestFileStorage_RestoreFromFileDB(t *testing.T) {
 	assert.NoError(t, err)
 
 	t.Run("Recover data from file DB to empty memory storage", func(t *testing.T) {
-		assert.Equal(t, "https://example.com", storage.ShortToLong["shortURL"])
-		assert.Equal(t, "shortURL", storage.LongToShort["https://example.com"])
-		assert.Equal(t, 1, storage.ID)
+		err := storage.RestoreFromFileDB()
+		require.NoError(t, err)
+
+		assert.Equal(t, entry, storage.Item["shortURL"])
 	})
 
 	t.Run("Empty path to DB file", func(t *testing.T) {
 		// если строка с путем до файла БД пустая, то мы пропускаем запись в файл
 		config.ServerConfig.FileDB = ""
 
-		emptyStorage := &FileStorage{
-			ID:          0,
-			ShortToLong: make(map[string]string),
-			LongToShort: make(map[string]string),
-		}
+		emptyStorage := &FileStorage{}
 
-		err := emptyStorage.SetEntryToFileDB("1", userID, "shortURL", "https://example.com")
+		err := emptyStorage.SetEntryToFileDB(filePath, &entry)
 
 		// Ошибки не должно быть, так как мы просто пропускаем запись в файл
 		assert.Error(t, err)
@@ -226,21 +251,16 @@ func TestFileStorage_RestoreFromFileDB(t *testing.T) {
 		require.NoError(t, err)
 		os.Remove(FileDB.Name()) // Удаляем файл сразу, чтобы симулировать его отсутствие.
 
-		storage := &FileStorage{
-			ID:          0,
-			ShortToLong: make(map[string]string),
-			LongToShort: make(map[string]string),
-		}
+		storage := &FileStorage{}
 
 		// в конфигурации указываем как БД уже не существующий файл
 		config.ServerConfig.FileDB = FileDB.Name()
 		// пытаемся восстановить записи из несуществующего файла
 		err = storage.RestoreFromFileDB()
 
-		assert.Error(t, err)                 // Функция не должна возвращать ошибку
-		assert.Empty(t, storage.ShortToLong) // Хранилище должно остаться пустым
-		assert.Empty(t, storage.LongToShort)
-		assert.Equal(t, 0, storage.ID) // ID не должен меняться
+		assert.Error(t, err)          // Функция не должна возвращать ошибку
+		assert.Empty(t, storage.Item) // Хранилище должно остаться пустым
+		//assert.Equal(t, 0, storage.ID) // ID не должен меняться
 	})
 
 	t.Run("FileDB read error", func(t *testing.T) {
@@ -252,11 +272,7 @@ func TestFileStorage_RestoreFromFileDB(t *testing.T) {
 		require.NoError(t, FileDB.Close())
 		require.NoError(t, os.Remove(FileDB.Name()))
 
-		storage := &FileStorage{
-			ID:          0,
-			ShortToLong: make(map[string]string),
-			LongToShort: make(map[string]string),
-		}
+		storage := &FileStorage{}
 
 		// в конфигурации указываем как БД уже не существующий файл
 		config.ServerConfig.FileDB = FileDB.Name()
@@ -322,14 +338,19 @@ func TestFileStorage_SetBatchInStorage(t *testing.T) {
 }
 
 func TestFileStorage_GetUserURLs(t *testing.T) {
-	memoryStorage := InitStorage()
+	FileDB, err := os.CreateTemp("", "test-short-url-storage.json_*.json")
+	require.NoError(t, err)
+	defer os.Remove(FileDB.Name())
+
+	storage, err := initTestEnvironment(FileDB)
+	assert.NoError(t, err)
 
 	ctx := context.Background()
 	userID := uuid.New().String()
 	ctx = context.WithValue(ctx, contextkeys.UserID, userID)
 
 	t.Run("Get user urls", func(t *testing.T) {
-		memoryStorage.Generator = &mocks.MockGenerator{Urls: []string{"abcd1234", "efgh5678"}}
+		storage.Generator = &mocks.MockGenerator{Urls: []string{"abcd1234", "efgh5678"}}
 
 		expectedBatch := []models.BatchItem{
 			{
@@ -342,22 +363,212 @@ func TestFileStorage_GetUserURLs(t *testing.T) {
 			},
 		}
 
-		_, err := memoryStorage.SetInStorage(ctx, "https://example3.com")
+		_, err := storage.SetInStorage(ctx, "https://example3.com")
 		assert.NoError(t, err)
 
-		_, err = memoryStorage.SetInStorage(ctx, "https://example4.com")
+		_, err = storage.SetInStorage(ctx, "https://example4.com")
 		assert.NoError(t, err)
 
-		batch, err := memoryStorage.GetUserURLs(ctx)
+		batch, err := storage.GetUserURLs(ctx)
 		assert.NoError(t, err)
-		assert.Equal(t, expectedBatch, batch)
+		assert.ElementsMatch(t, expectedBatch, batch)
 	})
 
 	t.Run("No UserID in r.Context()", func(t *testing.T) {
 		ctx := context.Background()
 
-		batch, err := memoryStorage.GetUserURLs(ctx)
+		batch, err := storage.GetUserURLs(ctx)
 		assert.Error(t, err)
 		assert.Nil(t, batch)
+	})
+}
+
+func TestFileStorage_GetActualURLs(t *testing.T) {
+	ctx := context.Background()
+	userID := "123456aa-1234-12a3-a1b2-1234567890a1"
+
+	testUUID1 := uuid.New().String()
+	testUUID2 := uuid.New().String()
+	ctx = context.WithValue(ctx, contextkeys.UserID, userID)
+
+	FileDB, err := os.CreateTemp("", "test-short-url-storage.json_*.json")
+	require.NoError(t, err)
+	defer os.Remove(FileDB.Name())
+
+	fileStorage, err := initTestEnvironment(FileDB)
+	assert.NoError(t, err)
+
+	t.Run("Get actual urls", func(t *testing.T) {
+		fileStorage.Generator = &mocks.MockGenerator{Urls: []string{"abcd1234", "efgh5678"}}
+
+		// Ожидаемая структура
+		expectedItem := map[string]models.Item{
+			"abcd1234": {
+				UUID:      testUUID1,
+				ShortURL:  "abcd1234",
+				LongURL:   "https://example.com",
+				UserID:    userID,
+				IsDeleted: false,
+			},
+			"efgh5678": {
+				UUID:      testUUID2,
+				ShortURL:  "efgh5678",
+				LongURL:   "https://example2.com",
+				UserID:    userID,
+				IsDeleted: false,
+			},
+		}
+
+		_, err = fileStorage.SetInStorage(ctx, "https://example.com")
+		assert.NoError(t, err)
+
+		_, err = fileStorage.SetInStorage(ctx, "https://example2.com")
+		assert.NoError(t, err)
+
+		latest := fileStorage.GetActualURLs()
+		for shortURL, actualItem := range latest {
+			expectedItem, ok := expectedItem[shortURL]
+			require.True(t, ok, "неожиданный shortURL %s", shortURL)
+
+			assert.Equal(t, expectedItem.ShortURL, actualItem.ShortURL)
+			assert.Equal(t, expectedItem.LongURL, actualItem.LongURL)
+			assert.Equal(t, expectedItem.UserID, actualItem.UserID)
+			assert.Equal(t, expectedItem.IsDeleted, actualItem.IsDeleted)
+		}
+	})
+}
+
+func TestFileStorage_GetLongFromShort(t *testing.T) {
+	ctx := context.Background()
+	userID := uuid.New().String()
+	ctx = context.WithValue(ctx, contextkeys.UserID, userID)
+
+	FileDB, err := os.CreateTemp("", "test-short-url-storage.json_*.json")
+	require.NoError(t, err)
+	defer os.Remove(FileDB.Name())
+
+	fileStorage, err := initTestEnvironment(FileDB)
+	assert.NoError(t, err)
+
+	t.Run("Get long url from valid short url", func(t *testing.T) {
+		fileStorage.Generator = &mocks.MockGenerator{Urls: []string{"abcd1234"}}
+		expectedLongURL := "https://example.com"
+
+		_, err = fileStorage.SetInStorage(ctx, "https://example.com")
+		assert.NoError(t, err)
+
+		longURL, err := fileStorage.GetLongFromShort("abcd1234")
+		assert.NoError(t, err)
+		assert.Equal(t, expectedLongURL, longURL)
+	})
+
+	t.Run("Get long url from invalid short url", func(t *testing.T) {
+		fileStorage.Generator = &mocks.MockGenerator{Urls: []string{"abcd1234"}}
+
+		_, err = fileStorage.GetLongFromShort("error123")
+		assert.Error(t, err, "ожидалась ошибка при запросе с несуществующим коротким URL")
+	})
+}
+
+func TestFileStorage_CleanUp(t *testing.T) {
+	ctx := context.Background()
+	userID := uuid.New().String()
+	ctx = context.WithValue(ctx, contextkeys.UserID, userID)
+
+	FileDB, err := os.CreateTemp("", "test-short-url-storage.json_*.json")
+	require.NoError(t, err)
+	defer os.Remove(FileDB.Name())
+
+	fileStorage, err := initTestEnvironment(FileDB)
+	assert.NoError(t, err)
+
+	t.Run("Mark short URL as deleted and do cleanup", func(t *testing.T) {
+		fileStorage.Generator = &mocks.MockGenerator{Urls: []string{"abcd1234", "efgh5678"}}
+
+		// ожидаемая структура после очистки
+		expectedItem := map[string]models.Item{
+			"efgh5678": {
+				ShortURL:  "efgh5678",
+				LongURL:   "https://example2.com",
+				UserID:    userID,
+				IsDeleted: false,
+			},
+		}
+
+		// добавляем два URL
+		_, err := fileStorage.SetInStorage(ctx, "https://example.com")
+		assert.NoError(t, err)
+		_, err = fileStorage.SetInStorage(ctx, "https://example2.com")
+		assert.NoError(t, err)
+
+		// помечаем один из них как удалённый
+		err = fileStorage.MarkAsDelete(ctx, []string{"abcd1234"})
+		assert.NoError(t, err)
+
+		// вызываем очистку удаленных URL
+		err = fileStorage.CleanUp(ctx)
+		assert.NoError(t, err)
+
+		latest := fileStorage.GetActualURLs()
+
+		// проверяем, что остался только один, нужный
+		require.Len(t, latest, 1, "ожидалась одна не удалённая запись")
+
+		// сверяем с ожидаемым (в цикле и без проверки UUID)
+		for shortURL, actualItem := range latest {
+			expectedItem, ok := expectedItem[shortURL]
+			require.True(t, ok, "неожиданный shortURL %s", shortURL)
+
+			assert.Equal(t, expectedItem.ShortURL, actualItem.ShortURL)
+			assert.Equal(t, expectedItem.LongURL, actualItem.LongURL)
+			assert.Equal(t, expectedItem.UserID, actualItem.UserID)
+			assert.Equal(t, expectedItem.IsDeleted, actualItem.IsDeleted)
+		}
+	})
+}
+
+func TestFileStorage_MarkAsDelete(t *testing.T) {
+	ctx := context.Background()
+	userID := uuid.New().String()
+	ctx = context.WithValue(ctx, contextkeys.UserID, userID)
+
+	FileDB, err := os.CreateTemp("", "test-short-url-storage.json_*.json")
+	require.NoError(t, err)
+	defer os.Remove(FileDB.Name())
+
+	fileStorage, err := initTestEnvironment(FileDB)
+	assert.NoError(t, err)
+
+	t.Run("Mark short URL as deleted", func(t *testing.T) {
+		fileStorage.Generator = &mocks.MockGenerator{Urls: []string{"abcd1234"}}
+
+		// ожидаемая структура после очистки
+		expectedItem := map[string]models.Item{
+			"abcd1234": {
+				ShortURL:  "abcd1234",
+				LongURL:   "https://example.com",
+				UserID:    userID,
+				IsDeleted: true,
+			},
+		}
+
+		// добавляем URL
+		_, err := fileStorage.SetInStorage(ctx, "https://example.com")
+		assert.NoError(t, err)
+
+		// помечаем как удалённый
+		err = fileStorage.MarkAsDelete(ctx, []string{"abcd1234"})
+		assert.NoError(t, err)
+
+		// сверяем с ожидаемым (в цикле и без проверки UUID)
+		for shortURL, item := range fileStorage.Item {
+			expectedItem, ok := expectedItem[shortURL]
+			require.True(t, ok, "неожиданный shortURL %s", shortURL)
+
+			assert.Equal(t, expectedItem.ShortURL, item.ShortURL)
+			assert.Equal(t, expectedItem.LongURL, item.LongURL)
+			assert.Equal(t, expectedItem.UserID, item.UserID)
+			assert.Equal(t, expectedItem.IsDeleted, item.IsDeleted)
+		}
 	})
 }

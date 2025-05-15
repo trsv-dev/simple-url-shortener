@@ -5,15 +5,15 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/lib/pq"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/contextkeys"
 	"go.uber.org/zap"
 	"strings"
 	"time"
-
-	_ "github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
 
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/config"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/errs"
@@ -54,7 +54,8 @@ func InitStorage() (*PgStorage, error) {
 			id SERIAL PRIMARY KEY,
 			long_url TEXT NOT NULL UNIQUE,
 			short_url VARCHAR(250) NOT NULL UNIQUE,
-            user_id varchar(36)
+            user_id VARCHAR(36),
+			is_deleted BOOLEAN NOT NULL DEFAULT FALSE
 		  );`
 
 	_, err = postgres.Exec(query)
@@ -167,7 +168,6 @@ func (pg *PgStorage) SetBatchInStorage(ctx context.Context, batch []models.Batch
 		// если передан невалидный URL - берем следующий
 		if !utils.IsValidURL(batch[i].OriginalURL) {
 			logger.Log.Debug("в батче присутствует невалидный URL", zap.String("original_url", batch[i].OriginalURL))
-			//return fmt.Errorf("в батче присутствует невалидный URL: %v", batch[i].OriginalURL)
 			continue
 		}
 
@@ -211,10 +211,16 @@ func (pg *PgStorage) SetBatchInStorage(ctx context.Context, batch []models.Batch
 }
 
 func (pg *PgStorage) GetFromStorage(ctx context.Context, shortURL string) (string, error) {
-	var longURL string
+	//var longURL string
 
-	row := pg.DB.QueryRowContext(ctx, `SELECT long_url FROM urls WHERE short_url = $1`, shortURL)
-	err := row.Scan(&longURL)
+	// структура, в которую мы будем получать не только longURL, но и isDeleted
+	URL := struct {
+		longURL   string
+		isDeleted bool
+	}{}
+
+	row := pg.DB.QueryRowContext(ctx, `SELECT long_url, is_deleted FROM urls WHERE short_url = $1`, shortURL)
+	err := row.Scan(&URL.longURL, &URL.isDeleted)
 	if err != nil {
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
@@ -225,30 +231,23 @@ func (pg *PgStorage) GetFromStorage(ctx context.Context, shortURL string) (strin
 		}
 	}
 
-	return longURL, nil
-}
-
-func (pg *PgStorage) Ping(ctx context.Context) error {
-	ctx, cancel := context.WithTimeout(ctx, 1*time.Second)
-	defer cancel()
-
-	if err := pg.DB.PingContext(ctx); err != nil {
-		logger.Log.Error("База данных Postgres не отвечает", zap.String("error", err.Error()))
-		return err
+	// если URL был помечен на удаление (is_deleted = true), но его почему-то запросили - надо дать знать в хендлер,
+	// он недоступен (в хендлере отдаем http.StatusGone)
+	if URL.isDeleted {
+		urlDeletedError := errs.NewErrURLDeleted(shortURL, URL.isDeleted, errors.New("URL был помечен как удаленный"))
+		logger.Log.Debug("Попытка доступа к удаленному URL", zap.Error(urlDeletedError))
+		return "", urlDeletedError
 	}
 
-	return nil
-}
-
-func (pg *PgStorage) Close() error {
-	return pg.DB.Close()
+	// если is_deleted = false, то отдаем длинный URL
+	return URL.longURL, nil
 }
 
 func (pg *PgStorage) GetUserURLs(ctx context.Context) ([]models.BatchItem, error) {
 	var urls []models.BatchItem
 	baseURL := config.GetServerConfig().BaseURL
 
-	rows, err := pg.DB.QueryContext(ctx, `SELECT long_url, short_url FROM urls WHERE user_id = $1`, ctx.Value(contextkeys.UserID))
+	rows, err := pg.DB.QueryContext(ctx, `SELECT long_url, short_url FROM urls WHERE user_id = $1 AND is_deleted = FALSE`, ctx.Value(contextkeys.UserID))
 	if err != nil {
 		logger.Log.Debug("ошибка запроса на получение URL-ов пользователя", zap.String("rows error", err.Error()))
 		return nil, err
@@ -274,4 +273,75 @@ func (pg *PgStorage) GetUserURLs(ctx context.Context) ([]models.BatchItem, error
 	}
 
 	return urls, nil
+}
+
+func (pg *PgStorage) MarkAsDelete(ctx context.Context, URLs []string) error {
+	// извлекаем userID из контекста
+	ctxUserID, ok := ctx.Value(contextkeys.UserID).(string)
+	if !ok || ctxUserID == "" {
+		return fmt.Errorf("userID отсутствует в контексте")
+	}
+
+	// начинаем транзакцию
+	tx, err := pg.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("ошибка создания транзакции %v ", err)
+	}
+	defer tx.Rollback()
+
+	Result, err := tx.ExecContext(ctx, `UPDATE urls SET is_deleted = TRUE WHERE short_url = ANY($1) AND user_id = $2`, pq.Array(URLs), ctxUserID)
+	if err != nil {
+		logger.Log.Warn("Ошибка при выполнении запроса на обновление", zap.Error(err))
+	}
+
+	affectedRows, err := Result.RowsAffected()
+	if err != nil {
+		logger.Log.Debug("Не удалось получить количество обновленных строк", zap.Error(err))
+	}
+	if err == nil && affectedRows < int64(len(URLs)) {
+		logger.Log.Debug("Некоторые URL не были помечены как удаленные — возможно, они не принадлежат пользователю или отсутствуют в БД",
+			zap.Int("передано", len(URLs)),
+			zap.Int64("обновлено", affectedRows),
+		)
+	}
+
+	// коммитим транзакцию
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("ошибка при коммите транзакции: %v", err)
+	}
+
+	return nil
+}
+
+func (pg *PgStorage) CleanUp(ctx context.Context) error {
+	Result, err := pg.DB.ExecContext(ctx, `DELETE FROM urls WHERE is_deleted = TRUE`)
+	if err != nil {
+		return fmt.Errorf("ошибка при удалении URL %w", err)
+	}
+
+	affectedRows, err := Result.RowsAffected()
+	if err != nil {
+		logger.Log.Debug("Не удалось получить количество удаленных строк", zap.Error(err))
+	}
+	if affectedRows > int64(0) {
+		logger.Log.Debug("Количество удаленных строк:", zap.Int64("deleted urls", affectedRows))
+	}
+
+	return nil
+}
+
+func (pg *PgStorage) Ping(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, 1*time.Second)
+	defer cancel()
+
+	if err := pg.DB.PingContext(ctx); err != nil {
+		logger.Log.Error("База данных Postgres не отвечает", zap.String("error", err.Error()))
+		return err
+	}
+
+	return nil
+}
+
+func (pg *PgStorage) Close() error {
+	return pg.DB.Close()
 }
