@@ -81,9 +81,17 @@ func (h *AppHandler) GetHandler(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, "/")
 
 	value, err := h.storage.GetFromStorage(ctx, id)
+	var errURLDeleted *errs.ErrURLDeleted
+
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		return
+		switch {
+		case errors.As(err, &errURLDeleted):
+			w.WriteHeader(http.StatusGone)
+			return
+		default:
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 	}
 
 	w.Header().Set("Location", value)
@@ -230,10 +238,10 @@ func (h *AppHandler) Batch(w http.ResponseWriter, r *http.Request) {
 	w.Write(data)
 }
 
-// UserURLs Функция обработки GET-запроса на получение всех сокращенных пользователем URL
+// UserURLs Функция обработки GET-запроса к /api/user/urls на получение всех сокращенных пользователем URL
 func (h *AppHandler) UserURLs(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		w.WriteHeader(http.StatusBadRequest)
+		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -254,5 +262,41 @@ func (h *AppHandler) UserURLs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	w.Write(data)
+}
+
+// Delete Функция обработки DELETE-запроса к /api/user/urls, которая в теле запроса
+// принимает список идентификаторов сокращённых URL для асинхронного удаления.
+func (h *AppHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	defer r.Body.Close()
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Ошибка чтения запроса", http.StatusInternalServerError)
+		return
+	}
+
+	// из хендлера возвращается JSON со списком коротких URL для удаления
+	var URLs []string
+
+	err = json.Unmarshal(body, &URLs)
+	if err != nil {
+		http.Error(w, "Ошибка декодирования json", http.StatusInternalServerError)
+		return
+	}
+
+	err = h.storage.MarkAsDelete(r.Context(), URLs)
+
+	if err != nil {
+		logger.Log.Info("ошибка при удалении URL", zap.String("delete url error", err.Error()))
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusAccepted)
 }
