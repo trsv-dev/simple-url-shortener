@@ -27,6 +27,16 @@ func (ms *MockStorage) GetUserURLs(ctx context.Context) ([]models.BatchItem, err
 }
 
 // Абстрактный метод для удовлетворения интерфейсу Storage.
+func (ms *MockStorage) MarkAsDelete(ctx context.Context, urls []string) error {
+	return nil
+}
+
+// Абстрактный метод для удовлетворения интерфейсу Storage.
+func (ms *MockStorage) CleanUp(ctx context.Context) error {
+	return nil
+}
+
+// Абстрактный метод для удовлетворения интерфейсу Storage.
 func (ms *MockStorage) Ping(ctx context.Context) error {
 	return nil
 }

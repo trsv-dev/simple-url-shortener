@@ -21,6 +21,8 @@ type Storage interface {
 	GetFromStorage(ctx context.Context, shortURL string) (string, error)
 	SetBatchInStorage(ctx context.Context, batch []models.BatchItem) error
 	GetUserURLs(ctx context.Context) ([]models.BatchItem, error)
+	MarkAsDelete(ctx context.Context, urls []string) error
+	CleanUp(ctx context.Context) error
 	Ping(ctx context.Context) error
 	Close() error
 }
