@@ -2,14 +2,21 @@ package main
 
 import (
 	"context"
+	"github.com/joho/godotenv"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/logger"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/server"
 	"go.uber.org/zap"
+	"log"
 )
 
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	errEnv := godotenv.Load("../../.env")
+	if errEnv != nil {
+		log.Println("Не удалось загрузить .env:", errEnv)
+	}
 
 	storage, err := server.RunServer(ctx)
 	if err != nil {
