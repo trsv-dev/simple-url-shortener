@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
+	"log"
+
 	"github.com/joho/godotenv"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/logger"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/server"
 	"go.uber.org/zap"
-	"log"
+
+	_ "net/http/pprof" // подключаем пакет pprof
 )
 
 func main() {

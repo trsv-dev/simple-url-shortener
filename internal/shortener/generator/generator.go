@@ -13,16 +13,17 @@ type URLGenerator interface {
 }
 
 var latin = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890"
-var random *rand.Rand
 
-// Инициализируем random.
-func init() {
-	source := rand.NewSource(time.Now().UnixNano())
-	random = rand.New(source)
+// DefaultGenerator Генератор коротких ссылок по умолчанию.
+// Random в структуре нужен, чтобы избежать возможных гонок.
+type DefaultGenerator struct {
+	random *rand.Rand
 }
 
-// DefaultGenerator Генератор коротких ссылок по умолчанию
-type DefaultGenerator struct{}
+// NewDefaultGenerator Конструктор, возвращающий дефолтовый генератор URL.
+func NewDefaultGenerator() *DefaultGenerator {
+	return &DefaultGenerator{random: rand.New(rand.NewSource(time.Now().UnixNano()))}
+}
 
 // MakeShortURL Создание рандомной строки заданной длины из константного набора символов.
 func (dg *DefaultGenerator) MakeShortURL(length int) (string, error) {
@@ -33,7 +34,7 @@ func (dg *DefaultGenerator) MakeShortURL(length int) (string, error) {
 	builder.Grow(length) // Предварительное выделение памяти
 
 	for i := 0; i < length; i++ {
-		builder.WriteByte(latin[random.Intn(len(latin))])
+		builder.WriteByte(latin[dg.random.Intn(len(latin))])
 	}
 	return builder.String(), nil
 

@@ -6,7 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
 	"github.com/google/uuid"
+
+	"os"
+	"sync"
 
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/config"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/contextkeys"
@@ -16,8 +20,6 @@ import (
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/models"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/utils"
 	"go.uber.org/zap"
-	"os"
-	"sync"
 )
 
 // Длина генерируемой последовательности символов.
@@ -35,7 +37,7 @@ type FileStorage struct {
 func InitStorage() *FileStorage {
 	URLs := &FileStorage{
 		Item:      make(map[string]models.Item),
-		Generator: &generator.DefaultGenerator{},
+		Generator: generator.NewDefaultGenerator(),
 	}
 
 	logger.Log.Info("Для хранения данных используется файл", zap.String("file path", config.GetServerConfig().FileDB))

@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
+
 	"github.com/google/uuid"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/config"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/contextkeys"
@@ -13,7 +15,6 @@ import (
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/models"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/utils"
 	"go.uber.org/zap"
-	"sync"
 )
 
 // Длина генерируемой последовательности символов.
@@ -34,7 +35,7 @@ func InitStorage() *MemoryStorage {
 
 	return &MemoryStorage{
 		Item:      make(map[string]models.Item),
-		Generator: &generator.DefaultGenerator{},
+		Generator: generator.NewDefaultGenerator(),
 	}
 }
 

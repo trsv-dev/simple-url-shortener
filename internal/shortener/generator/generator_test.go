@@ -1,16 +1,13 @@
 package generator
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
-type MockGenerator struct {
-	Generator DefaultGenerator
-}
-
+// Тестирование дефольного генератора коротких URL.
 func TestMakeShortURL(t *testing.T) {
-	mockGen := MockGenerator{}
 
 	testTable := []struct {
 		name          string
@@ -24,7 +21,8 @@ func TestMakeShortURL(t *testing.T) {
 
 	for _, tt := range testTable {
 		t.Run(tt.name, func(t *testing.T) {
-			generated, err := mockGen.Generator.MakeShortURL(tt.length)
+			gen := NewDefaultGenerator()
+			generated, err := gen.MakeShortURL(tt.length)
 			if tt.wantError {
 				assert.Error(t, err, "Ожидалась ошибка генерации короткого URL")
 				assert.Contains(t, err.Error(), tt.expectedError)
