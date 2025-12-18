@@ -3,15 +3,17 @@ package memory
 import (
 	"context"
 	"errors"
+	"strings"
+	"testing"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/config"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/contextkeys"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/errs"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/mocks"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/models"
-	"strings"
-	"testing"
 )
 
 func TestMemoryStorage_SetInStorage(t *testing.T) {
@@ -160,128 +162,37 @@ func TestMemoryStorage_GetUserURLs(t *testing.T) {
 	})
 }
 
-func TestMemoryStorage_GetActualURLs(t *testing.T) {
-	ctx := context.Background()
-	userID := "123456aa-1234-12a3-a1b2-1234567890a1"
-	ctx = context.WithValue(ctx, contextkeys.UserID, userID)
-
-	t.Run("Get actual urls", func(t *testing.T) {
-		memoryStorage := InitStorage()
-		memoryStorage.Generator = &mocks.MockGenerator{Urls: []string{"abcd1234", "efgh5678"}}
-
-		// Ожидаемая структура
-		expectedItem := map[string]models.Item{
-			"abcd1234": {
-				ShortURL:  "abcd1234",
-				LongURL:   "https://example.com",
-				UserID:    userID,
-				IsDeleted: false,
-			},
-			"efgh5678": {
-				ShortURL:  "efgh5678",
-				LongURL:   "https://example2.com",
-				UserID:    userID,
-				IsDeleted: false,
-			},
-		}
-
-		_, err := memoryStorage.SetInStorage(ctx, "https://example.com")
-		assert.NoError(t, err)
-
-		_, err = memoryStorage.SetInStorage(ctx, "https://example2.com")
-		assert.NoError(t, err)
-
-		latest := memoryStorage.GetActualURLs()
-		for shortURL, actualItem := range latest {
-			expectedItem, ok := expectedItem[shortURL]
-			require.True(t, ok, "неожиданный shortURL %s", shortURL)
-
-			assert.Equal(t, expectedItem.ShortURL, actualItem.ShortURL)
-			assert.Equal(t, expectedItem.LongURL, actualItem.LongURL)
-			assert.Equal(t, expectedItem.UserID, actualItem.UserID)
-			assert.Equal(t, expectedItem.IsDeleted, actualItem.IsDeleted)
-		}
-	})
-}
-
-func TestMemoryStorage_GetLongFromShort(t *testing.T) {
-	ctx := context.Background()
-	userID := uuid.New().String()
-	ctx = context.WithValue(ctx, contextkeys.UserID, userID)
-
-	t.Run("Get long url from valid short url", func(t *testing.T) {
-		memoryStorage := InitStorage()
-		memoryStorage.Generator = &mocks.MockGenerator{Urls: []string{"abcd1234"}}
-		expectedLongURL := "https://example.com"
-
-		_, err := memoryStorage.SetInStorage(ctx, "https://example.com")
-		assert.NoError(t, err)
-
-		longURL, err := memoryStorage.GetLongFromShort("abcd1234")
-		assert.NoError(t, err)
-		assert.Equal(t, expectedLongURL, longURL)
-	})
-
-	t.Run("Get long url from invalid short url", func(t *testing.T) {
-		memoryStorage := InitStorage()
-		memoryStorage.Generator = &mocks.MockGenerator{Urls: []string{"abcd1234"}}
-
-		_, err := memoryStorage.SetInStorage(ctx, "https://example.com")
-		assert.NoError(t, err, "ошибка при добавлении URL в хранилище")
-
-		_, err = memoryStorage.GetLongFromShort("error123")
-		assert.Error(t, err, "ожидалась ошибка при запросе с несуществующим коротким URL")
-	})
-}
-
 func TestMemoryStorage_CleanUp(t *testing.T) {
 	ctx := context.Background()
 	userID := uuid.New().String()
 	ctx = context.WithValue(ctx, contextkeys.UserID, userID)
 
 	t.Run("Mark short URL as deleted and do cleanup", func(t *testing.T) {
-		memoryStorage := InitStorage()
-		memoryStorage.Generator = &mocks.MockGenerator{Urls: []string{"abcd1234", "efgh5678"}}
-
-		// ожидаемая структура после очистки
-		expectedItem := map[string]models.Item{
-			"efgh5678": {
-				ShortURL:  "efgh5678",
-				LongURL:   "https://example2.com",
-				UserID:    userID,
-				IsDeleted: false,
-			},
-		}
+		storage := InitStorage()
+		storage.Generator = &mocks.MockGenerator{Urls: []string{"abcd1234", "efgh5678"}}
 
 		// добавляем два URL
-		_, err := memoryStorage.SetInStorage(ctx, "https://example.com")
-		assert.NoError(t, err)
-		_, err = memoryStorage.SetInStorage(ctx, "https://example2.com")
-		assert.NoError(t, err)
+		_, err := storage.SetInStorage(ctx, "https://example.com")
+		require.NoError(t, err)
+		_, err = storage.SetInStorage(ctx, "https://example2.com")
+		require.NoError(t, err)
 
 		// помечаем один из них как удалённый
-		err = memoryStorage.MarkAsDelete(ctx, []string{"abcd1234"})
-		assert.NoError(t, err)
+		err = storage.MarkAsDelete(ctx, []string{"abcd1234"})
+		require.NoError(t, err)
 
 		// вызываем очистку удаленных URL
-		err = memoryStorage.CleanUp(ctx)
-		assert.NoError(t, err)
+		err = storage.CleanUp(ctx)
+		require.NoError(t, err)
 
-		latest := memoryStorage.GetActualURLs()
+		// получаем оставшиеся живые URL через публичный метод
+		urls, err := storage.GetUserURLs(ctx)
+		require.NoError(t, err)
 
-		// проверяем, что остался только один, нужный
-		require.Len(t, latest, 1, "ожидалась одна не удалённая запись")
-
-		// сверяем с ожидаемым (в цикле и без проверки UUID)
-		for shortURL, actualItem := range latest {
-			expectedItem, ok := expectedItem[shortURL]
-			require.True(t, ok, "неожиданный shortURL %s", shortURL)
-
-			assert.Equal(t, expectedItem.ShortURL, actualItem.ShortURL)
-			assert.Equal(t, expectedItem.LongURL, actualItem.LongURL)
-			assert.Equal(t, expectedItem.UserID, actualItem.UserID)
-			assert.Equal(t, expectedItem.IsDeleted, actualItem.IsDeleted)
-		}
+		// ожидаем только один URL
+		require.Len(t, urls, 1, "ожидалась одна не удалённая запись")
+		assert.Equal(t, "https://example2.com", urls[0].OriginalURL)
+		assert.Equal(t, "efgh5678", urls[0].ShortURL[len(config.GetServerConfig().BaseURL)+1:])
 	})
 }
 

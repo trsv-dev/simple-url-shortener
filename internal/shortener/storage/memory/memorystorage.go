@@ -23,9 +23,10 @@ const length = 8
 // MemoryStorage Хранилище в памяти.
 // Структура хранилища в памяти, имплементирующая интерфейс Storage.
 type MemoryStorage struct {
-	Item      map[string]models.Item
-	Generator generator.URLGenerator
-	mu        sync.RWMutex
+	Item        map[string]models.Item // short → item
+	LongToShort map[string]string      // long → short
+	Generator   generator.URLGenerator
+	mu          sync.RWMutex
 }
 
 // InitStorage Инициализация хранилища
@@ -34,8 +35,9 @@ func InitStorage() *MemoryStorage {
 	logger.Log.Info("Для хранения данных используется память")
 
 	return &MemoryStorage{
-		Item:      make(map[string]models.Item),
-		Generator: generator.NewDefaultGenerator(),
+		Item:        make(map[string]models.Item),
+		LongToShort: make(map[string]string),
+		Generator:   generator.NewDefaultGenerator(),
 	}
 }
 
@@ -47,7 +49,7 @@ func (ms *MemoryStorage) SetInStorage(ctx context.Context, longURL string) (stri
 
 	// если длинный URL валидный
 	if utils.IsValidURL(longURL) {
-		if shortURL, err := ms.GetShortFromLong(longURL); err == nil {
+		if shortURL, ok := ms.LongToShort[longURL]; ok {
 			conflictErr := errs.NewErrLongURLConflict(longURL, shortURL, errors.New("URL уже существует в БД"))
 			return "", conflictErr
 		}
@@ -96,6 +98,7 @@ func (ms *MemoryStorage) SetInStorage(ctx context.Context, longURL string) (stri
 
 		// добавляем item в in-memory представление
 		ms.Item[shortURL] = item
+		ms.LongToShort[longURL] = shortURL
 
 		return shortURL, nil
 	}
@@ -117,7 +120,7 @@ func (ms *MemoryStorage) SetBatchInStorage(ctx context.Context, batch []models.B
 		}
 
 		// проверяем, есть ли уже длинный (Original URL) URL в хранилище
-		if existingShortURL, err := ms.GetLongFromShort(batch[i].OriginalURL); err == nil {
+		if existingShortURL, ok := ms.LongToShort[batch[i].OriginalURL]; ok {
 			// если есть - просто присваиваем соответствующему полю в структуре:
 			// дополняем полученный из хендлера batch коротким URL с базовым URL чтобы в хендлере потом
 			// маршаллить его в ответ сервера
@@ -166,6 +169,7 @@ func (ms *MemoryStorage) SetBatchInStorage(ctx context.Context, batch []models.B
 
 			// добавляем item в in-memory представление
 			ms.Item[shortURL] = item
+			ms.LongToShort[item.LongURL] = shortURL
 
 			break
 		}
@@ -268,7 +272,16 @@ func (ms *MemoryStorage) CleanUp(ctx context.Context) error {
 	defer ms.mu.Unlock()
 
 	mapLength := len(ms.Item)
-	latestURLs := ms.GetActualURLs()
+	latestURLs := make(map[string]models.Item)
+
+	for shortURL, item := range ms.Item {
+		// если item.IsDelete = true, то пропускаем его и не добавляем в мапу latest, где находятся "живые" item
+		if item.IsDeleted {
+			continue
+		}
+
+		latestURLs[shortURL] = item
+	}
 
 	ms.Item = latestURLs
 
@@ -288,49 +301,4 @@ func (ms *MemoryStorage) Ping(ctx context.Context) error {
 // Close Абстрактный метод для удовлетворения интерфейсу Storage.
 func (ms *MemoryStorage) Close() error {
 	return nil // Закрывать нечего, но метод нужен для соответствия интерфейсу
-}
-
-// GetShortFromLong Поиск короткого URL по переданному оригинальному URL.
-// ВНИМАНИЕ: небезопасна для конкурентного доступа (unsafe).
-// Требует внешнего захвата блокировки: fs.mu.RLock() перед вызовом!
-func (ms *MemoryStorage) GetShortFromLong(longURL string) (string, error) {
-	// Перебираем все элементы в мапе fs.Item
-	for shortURL, item := range ms.Item {
-		if item.LongURL == longURL && !item.IsDeleted {
-			return shortURL, nil
-		}
-	}
-
-	return "", fmt.Errorf("не был найден короткий URL, который соответствовал бы переданному длинному")
-}
-
-// GetLongFromShort Поиск длинного URL по переданному короткому.
-// ВНИМАНИЕ: небезопасна для конкурентного доступа (unsafe).
-// Требует внешнего захвата блокировки: fs.mu.RLock() перед вызовом!
-func (ms *MemoryStorage) GetLongFromShort(shortURL string) (string, error) {
-	if item, ok := ms.Item[shortURL]; ok && !item.IsDeleted {
-		// если короткий URL найден в мапе и он не помечен как удалённый — возвращаем длинный URL
-		return item.LongURL, nil
-	}
-
-	// если URL не найден или помечен как удалённый — возвращаем ошибку
-	return "", fmt.Errorf("не был найден длинный URL, который соответствовал бы переданному короткому")
-}
-
-// GetActualURLs Возврат актуального списка URL из in-memory представления.
-// ВНИМАНИЕ: небезопасна для конкурентного доступа (unsafe).
-// Требует внешнего захвата блокировки: fs.mu.RLock() перед вызовом!
-func (ms *MemoryStorage) GetActualURLs() map[string]models.Item {
-	latest := make(map[string]models.Item)
-
-	for shortURL, item := range ms.Item {
-		// если item.IsDelete = true, то пропускаем его и не добавляем в мапу latest, где находятся "живые" item
-		if item.IsDeleted {
-			continue
-		}
-
-		latest[shortURL] = item
-	}
-
-	return latest
 }
