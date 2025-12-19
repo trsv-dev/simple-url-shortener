@@ -68,7 +68,8 @@ func BenchmarkPostHandler(b *testing.B) {
 		// тело запроса
 		url := fmt.Sprintf("https://example.com/page_%d", i)
 		// каждый раз передаем новый longURL из сгенерированного слайса longURLs
-		r := httptest.NewRequestWithContext(ctx, http.MethodPost, "/", bytes.NewReader([]byte(url)))
+		r := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader([]byte(url)))
+		r = r.WithContext(ctx)
 		// каждый раз создаём новый Recorder, чтобы не смешивать ответы
 		w := httptest.NewRecorder()
 
@@ -121,7 +122,9 @@ func BenchmarkAPIShorten(b *testing.B) {
 		url := fmt.Sprintf("https://example.com/%d", i) // уникальный URL для каждой итерации
 		body := []byte(fmt.Sprintf(`{"url":"%s"}`, url))
 
-		r := httptest.NewRequestWithContext(ctx, http.MethodPost, "/api/shorten", bytes.NewReader(body))
+		r := httptest.NewRequest(http.MethodPost, "/api/shorten", bytes.NewReader(body))
+		r = r.WithContext(ctx)
+
 		r.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 
@@ -149,7 +152,9 @@ func BenchmarkBatch(b *testing.B) {
 		// cоздаём request с контекстом, где есть UserID
 		b.StopTimer()
 		ctx := context.WithValue(context.Background(), contextkeys.UserID, strconv.Itoa(i))
-		r := httptest.NewRequestWithContext(ctx, http.MethodPost, "/api/shorten/batch", bytes.NewReader(batch))
+
+		r := httptest.NewRequest(http.MethodPost, "/api/shorten/batch", bytes.NewReader(batch))
+		r = r.WithContext(ctx)
 
 		r.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
@@ -180,7 +185,8 @@ func BenchmarkUserURLs(b *testing.B) {
 		}
 	}
 
-	r := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/user/urls", nil)
+	r := httptest.NewRequest(http.MethodGet, "/api/user/urls", nil)
+	r = r.WithContext(ctx)
 
 	b.ResetTimer()
 	b.ReportAllocs()
@@ -232,7 +238,9 @@ func BenchmarkDelete(b *testing.B) {
 
 		data, _ := json.Marshal(shortURLs[start:end])
 
-		r := httptest.NewRequestWithContext(ctx, http.MethodDelete, "/api/user/urls", bytes.NewReader(data))
+		r := httptest.NewRequest(http.MethodDelete, "/api/user/urls", bytes.NewReader(data))
+		r = r.WithContext(ctx)
+
 		w := httptest.NewRecorder()
 
 		b.StartTimer()
