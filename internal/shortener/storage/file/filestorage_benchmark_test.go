@@ -140,7 +140,7 @@ func BenchmarkFileStorage_GetFromStorage(b *testing.B) {
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		// ограничим диапазон индексов (i%items) чтобы не вылететь за размер мапы
+		// ограничим диапазон индексов (i%items) чтобы не вылететь за размер слайса
 		shortID := shortIDs[i%items]
 
 		_, err := storage.GetFromStorage(ctx, shortID)

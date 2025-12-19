@@ -264,7 +264,16 @@ func (pg *PgStorage) GetUserURLs(ctx context.Context) ([]models.BatchItem, error
 		}
 
 		// добавляем к сокращенному URL базовый URL
-		url.ShortURL = baseURL + "/" + url.ShortURL
+		// strings.Builder позволяет заранее выделить память под строку и писать
+		// в неё несколько частей без лишних копирований
+		var sb strings.Builder
+		sb.Grow(len(baseURL) + 1 + len(url.ShortURL)) // заранее выделяем нужный размер
+		sb.WriteString(baseURL)
+		sb.WriteByte('/')
+		sb.WriteString(url.ShortURL)
+
+		url.ShortURL = sb.String()
+
 		urls = append(urls, url)
 	}
 
