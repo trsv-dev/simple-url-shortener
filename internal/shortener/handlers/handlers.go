@@ -4,15 +4,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"strings"
+
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/config"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/errs"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/logger"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/models"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/storage"
 	"go.uber.org/zap"
-	"io"
-	"net/http"
-	"strings"
 )
 
 // AppHandler Структура для работы с зависимостями хендлеров.
@@ -20,7 +21,7 @@ type AppHandler struct {
 	storage storage.Storage
 }
 
-// NewAppHandler Конструктор AppHandler
+// NewAppHandler Конструктор AppHandler.
 func NewAppHandler(s storage.Storage) *AppHandler {
 	return &AppHandler{storage: s}
 }

@@ -3,14 +3,15 @@ package server
 import (
 	"context"
 	"errors"
+	"net/http"
+	"time"
+
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/config"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/handlers"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/logger"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/router"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/storage"
 	"go.uber.org/zap"
-	"net/http"
-	"time"
 )
 
 func NewServer() (*http.Server, storage.Storage, error) {

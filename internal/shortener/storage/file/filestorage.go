@@ -6,7 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
 	"github.com/google/uuid"
+
+	"os"
+	"sync"
 
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/config"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/contextkeys"
@@ -16,8 +20,6 @@ import (
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/models"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/utils"
 	"go.uber.org/zap"
-	"os"
-	"sync"
 )
 
 // Длина генерируемой последовательности символов.
@@ -26,16 +28,18 @@ const length = 8
 // FileStorage Файловое хранилище.
 // Структура файлового хранилища, имплементирующая интерфейс Storage.
 type FileStorage struct {
-	Item      map[string]models.Item
-	Generator generator.URLGenerator
-	mu        sync.RWMutex
+	Item        map[string]models.Item // short → item
+	LongToShort map[string]string      // long → short
+	Generator   generator.URLGenerator
+	mu          sync.RWMutex
 }
 
 // InitStorage Инициализация хранилища.
 func InitStorage() *FileStorage {
 	URLs := &FileStorage{
-		Item:      make(map[string]models.Item),
-		Generator: &generator.DefaultGenerator{},
+		Item:        make(map[string]models.Item),
+		LongToShort: make(map[string]string),
+		Generator:   generator.NewDefaultGenerator(),
 	}
 
 	logger.Log.Info("Для хранения данных используется файл", zap.String("file path", config.GetServerConfig().FileDB))
@@ -55,7 +59,8 @@ func (fs *FileStorage) SetInStorage(ctx context.Context, longURL string) (string
 
 	// если длинный URL валидный
 	if utils.IsValidURL(longURL) {
-		if shortURL, err := fs.GetShortFromLong(longURL); err == nil {
+		//if shortURL, err := fs.GetShortFromLong(longURL); err == nil {
+		if shortURL, ok := fs.LongToShort[longURL]; ok {
 			conflictErr := errs.NewErrLongURLConflict(longURL, shortURL, errors.New("URL уже существует в БД"))
 			return "", conflictErr
 		}
@@ -112,6 +117,7 @@ func (fs *FileStorage) SetInStorage(ctx context.Context, longURL string) (string
 
 		// добавляем item в in-memory представление
 		fs.Item[shortURL] = item
+		fs.LongToShort[longURL] = shortURL
 
 		return shortURL, nil
 	}
@@ -133,7 +139,7 @@ func (fs *FileStorage) SetBatchInStorage(ctx context.Context, batch []models.Bat
 		}
 
 		// проверяем, есть ли уже длинный (Original URL) URL в хранилище
-		if existingShortURL, err := fs.GetLongFromShort(batch[i].OriginalURL); err == nil {
+		if existingShortURL, ok := fs.LongToShort[batch[i].OriginalURL]; ok {
 			// если есть - просто присваиваем соответствующему полю в структуре:
 			// дополняем полученный из хендлера batch коротким URL с базовым URL чтобы в хендлере потом
 			// маршаллить его в ответ сервера
@@ -190,6 +196,7 @@ func (fs *FileStorage) SetBatchInStorage(ctx context.Context, batch []models.Bat
 
 			// добавляем item в in-memory представление
 			fs.Item[shortURL] = item
+			fs.LongToShort[item.LongURL] = shortURL
 
 			break
 		}
@@ -395,8 +402,14 @@ func (fs *FileStorage) CleanUp(ctx context.Context) error {
 
 	defer currentFile.Close()
 
-	mapLength := len(fs.Item)
-	latestURLs := fs.GetActualURLs()
+	originalMapLength := len(fs.Item)
+
+	for shortURL, item := range fs.Item {
+		// если item.IsDelete = true, то удаляем его из мапы
+		if item.IsDeleted {
+			delete(fs.Item, shortURL)
+		}
+	}
 
 	newFile, err := os.CreateTemp(os.TempDir(), "temp_file_db_*.json")
 	if err != nil {
@@ -407,9 +420,9 @@ func (fs *FileStorage) CleanUp(ctx context.Context) error {
 	defer newFile.Close()
 
 	// считаем количество удаленных записей
-	deletedCount := mapLength - len(latestURLs)
+	deletedCount := originalMapLength - len(fs.Item)
 
-	for _, fileEntry := range latestURLs {
+	for _, fileEntry := range fs.Item {
 		err := fs.SetEntryToFileDB(newFile.Name(), &fileEntry)
 		if err != nil {
 			return fmt.Errorf("ошибка записи в файл %v: %v", config.GetServerConfig().FileDB, err)
@@ -442,49 +455,4 @@ func (fs *FileStorage) Ping(ctx context.Context) error {
 // Close Абстрактный метод для удовлетворения интерфейсу Storage.
 func (fs *FileStorage) Close() error {
 	return nil // Закрывать нечего, но метод нужен для соответствия интерфейсу
-}
-
-// GetShortFromLong Поиск короткого URL по переданному оригинальному URL.
-// ВНИМАНИЕ: небезопасна для конкурентного доступа (unsafe).
-// Требует внешнего захвата блокировки: fs.mu.RLock() перед вызовом!
-func (fs *FileStorage) GetShortFromLong(longURL string) (string, error) {
-	// Перебираем все элементы в мапе fs.Item
-	for shortURL, item := range fs.Item {
-		if item.LongURL == longURL && !item.IsDeleted {
-			return shortURL, nil
-		}
-	}
-
-	return "", fmt.Errorf("не был найден короткий URL, который соответствовал бы переданному длинному")
-}
-
-// GetLongFromShort Поиск длинного URL по переданному короткому.
-// ВНИМАНИЕ: небезопасна для конкурентного доступа (unsafe).
-// Требует внешнего захвата блокировки: fs.mu.RLock() перед вызовом!
-func (fs *FileStorage) GetLongFromShort(shortURL string) (string, error) {
-	if item, ok := fs.Item[shortURL]; ok && !item.IsDeleted {
-		// если короткий URL найден в мапе и он не помечен как удалённый — возвращаем длинный URL
-		return item.LongURL, nil
-	}
-
-	// если URL не найден или помечен как удалённый — возвращаем ошибку
-	return "", fmt.Errorf("не был найден длинный URL, который соответствовал бы переданному короткому")
-}
-
-// GetActualURLs Возврат актуального списка URL из in-memory представления.
-// ВНИМАНИЕ: небезопасна для конкурентного доступа (unsafe).
-// Требует внешнего захвата блокировки: fs.mu.RLock() перед вызовом!
-func (fs *FileStorage) GetActualURLs() map[string]models.Item {
-	latest := make(map[string]models.Item)
-
-	for shortURL, item := range fs.Item {
-		// если item.IsDelete = true, то пропускаем его и не добавляем в мапу latest, где находятся "живые" item
-		if item.IsDeleted {
-			continue
-		}
-
-		latest[shortURL] = item
-	}
-
-	return latest
 }

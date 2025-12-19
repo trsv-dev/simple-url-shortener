@@ -5,6 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
+	"time"
+
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -12,8 +15,6 @@ import (
 	"github.com/lib/pq"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/contextkeys"
 	"go.uber.org/zap"
-	"strings"
-	"time"
 
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/config"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/errs"
@@ -47,7 +48,7 @@ func InitStorage() (*PgStorage, error) {
 
 	pgstore := &PgStorage{
 		DB:        postgres,
-		Generator: &generator.DefaultGenerator{},
+		Generator: generator.NewDefaultGenerator(),
 	}
 
 	query := `CREATE TABLE IF NOT EXISTS urls (
@@ -263,7 +264,16 @@ func (pg *PgStorage) GetUserURLs(ctx context.Context) ([]models.BatchItem, error
 		}
 
 		// добавляем к сокращенному URL базовый URL
-		url.ShortURL = baseURL + "/" + url.ShortURL
+		// strings.Builder позволяет заранее выделить память под строку и писать
+		// в неё несколько частей без лишних копирований
+		var sb strings.Builder
+		sb.Grow(len(baseURL) + 1 + len(url.ShortURL)) // заранее выделяем нужный размер
+		sb.WriteString(baseURL)
+		sb.WriteByte('/')
+		sb.WriteString(url.ShortURL)
+
+		url.ShortURL = sb.String()
+
 		urls = append(urls, url)
 	}
 
