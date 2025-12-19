@@ -8,8 +8,6 @@ import (
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/logger"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/server"
 	"go.uber.org/zap"
-
-	_ "net/http/pprof" // подключаем пакет pprof
 )
 
 func main() {
