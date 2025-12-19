@@ -271,22 +271,17 @@ func (ms *MemoryStorage) CleanUp(ctx context.Context) error {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 
-	mapLength := len(ms.Item)
-	latestURLs := make(map[string]models.Item)
+	originalMapLength := len(ms.Item)
 
 	for shortURL, item := range ms.Item {
-		// если item.IsDelete = true, то пропускаем его и не добавляем в мапу latest, где находятся "живые" item
+		// если item.IsDelete = true, то удаляем его из мапы
 		if item.IsDeleted {
-			continue
+			delete(ms.Item, shortURL)
 		}
-
-		latestURLs[shortURL] = item
 	}
 
-	ms.Item = latestURLs
-
 	// считаем количество удаленных записей
-	deletedCount := mapLength - len(latestURLs)
+	deletedCount := originalMapLength - len(ms.Item)
 
 	logger.Log.Debug("Количество удаленных строк:", zap.Int("deleted urls", deletedCount))
 

@@ -402,18 +402,13 @@ func (fs *FileStorage) CleanUp(ctx context.Context) error {
 
 	defer currentFile.Close()
 
-	mapLength := len(fs.Item)
-	//latestURLs := fs.GetActualURLs()
-
-	latestURLs := make(map[string]models.Item)
+	originalMapLength := len(fs.Item)
 
 	for shortURL, item := range fs.Item {
-		// если item.IsDelete = true, то пропускаем его и не добавляем в мапу latest, где находятся "живые" item
+		// если item.IsDelete = true, то удаляем его из мапы
 		if item.IsDeleted {
-			continue
+			delete(fs.Item, shortURL)
 		}
-
-		latestURLs[shortURL] = item
 	}
 
 	newFile, err := os.CreateTemp(os.TempDir(), "temp_file_db_*.json")
@@ -425,9 +420,9 @@ func (fs *FileStorage) CleanUp(ctx context.Context) error {
 	defer newFile.Close()
 
 	// считаем количество удаленных записей
-	deletedCount := mapLength - len(latestURLs)
+	deletedCount := originalMapLength - len(fs.Item)
 
-	for _, fileEntry := range latestURLs {
+	for _, fileEntry := range fs.Item {
 		err := fs.SetEntryToFileDB(newFile.Name(), &fileEntry)
 		if err != nil {
 			return fmt.Errorf("ошибка записи в файл %v: %v", config.GetServerConfig().FileDB, err)
@@ -461,48 +456,3 @@ func (fs *FileStorage) Ping(ctx context.Context) error {
 func (fs *FileStorage) Close() error {
 	return nil // Закрывать нечего, но метод нужен для соответствия интерфейсу
 }
-
-//// GetShortFromLong Поиск короткого URL по переданному оригинальному URL.
-//// ВНИМАНИЕ: небезопасна для конкурентного доступа (unsafe).
-//// Требует внешнего захвата блокировки: fs.mu.RLock() перед вызовом!
-//func (fs *FileStorage) GetShortFromLong(longURL string) (string, error) {
-//	// Перебираем все элементы в мапе fs.Item
-//	for shortURL, item := range fs.Item {
-//		if item.LongURL == longURL && !item.IsDeleted {
-//			return shortURL, nil
-//		}
-//	}
-//
-//	return "", fmt.Errorf("не был найден короткий URL, который соответствовал бы переданному длинному")
-//}
-
-//// GetLongFromShort Поиск длинного URL по переданному короткому.
-//// ВНИМАНИЕ: небезопасна для конкурентного доступа (unsafe).
-//// Требует внешнего захвата блокировки: fs.mu.RLock() перед вызовом!
-//func (fs *FileStorage) GetLongFromShort(shortURL string) (string, error) {
-//	if item, ok := fs.Item[shortURL]; ok && !item.IsDeleted {
-//		// если короткий URL найден в мапе и он не помечен как удалённый — возвращаем длинный URL
-//		return item.LongURL, nil
-//	}
-//
-//	// если URL не найден или помечен как удалённый — возвращаем ошибку
-//	return "", fmt.Errorf("не был найден длинный URL, который соответствовал бы переданному короткому")
-//}
-
-//// GetActualURLs Возврат актуального списка URL из in-memory представления.
-//// ВНИМАНИЕ: небезопасна для конкурентного доступа (unsafe).
-//// Требует внешнего захвата блокировки: fs.mu.RLock() перед вызовом!
-//func (fs *FileStorage) GetActualURLs() map[string]models.Item {
-//	latest := make(map[string]models.Item)
-//
-//	for shortURL, item := range fs.Item {
-//		// если item.IsDelete = true, то пропускаем его и не добавляем в мапу latest, где находятся "живые" item
-//		if item.IsDeleted {
-//			continue
-//		}
-//
-//		latest[shortURL] = item
-//	}
-//
-//	return latest
-//}
