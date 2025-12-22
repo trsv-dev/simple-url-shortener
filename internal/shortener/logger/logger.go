@@ -1,10 +1,11 @@
 package logger
 
 import (
-	"go.uber.org/zap"
 	"net/http"
 	"strconv"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 // Log Никакой код, кроме функции InitLogger, не должен модифицировать эту переменную.

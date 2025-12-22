@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"flag"
-	"github.com/stretchr/testify/assert"
 	"net/http"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func resetFlags() {

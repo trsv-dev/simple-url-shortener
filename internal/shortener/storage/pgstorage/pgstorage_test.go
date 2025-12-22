@@ -5,6 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"regexp"
+	"testing"
+
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -14,8 +17,6 @@ import (
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/errs"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/mocks"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/models"
-	"regexp"
-	"testing"
 )
 
 func TestPgStorage_Ping_WithMock(t *testing.T) {
