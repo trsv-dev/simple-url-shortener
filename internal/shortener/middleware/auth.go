@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"time"
+
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/google/uuid"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/contextkeys"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/logger"
 	"go.uber.org/zap"
-	"net/http"
-	"time"
 )
 
 type Claims struct {

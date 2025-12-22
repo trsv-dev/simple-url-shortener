@@ -4,16 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/stretchr/testify/assert"
-	"github.com/trsv-dev/simple-url-shortener/internal/shortener/contextkeys"
-	"github.com/trsv-dev/simple-url-shortener/internal/shortener/errs"
-	"github.com/trsv-dev/simple-url-shortener/internal/shortener/models"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/contextkeys"
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/errs"
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/models"
 )
 
 // Структура, которая имитирует ошибку при чтении. Когда обработчик получает её,

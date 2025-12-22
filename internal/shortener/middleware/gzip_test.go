@@ -6,14 +6,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/stretchr/testify/require"
-	"github.com/trsv-dev/simple-url-shortener/internal/shortener/handlers"
-	"github.com/trsv-dev/simple-url-shortener/internal/shortener/models"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/handlers"
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/models"
 )
 
 // MockStorage Структура, которая имитирует работу хранилища URL.

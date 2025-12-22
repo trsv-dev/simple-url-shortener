@@ -2,9 +2,10 @@ package models
 
 import (
 	"encoding/json"
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestRequestSerialization(t *testing.T) {

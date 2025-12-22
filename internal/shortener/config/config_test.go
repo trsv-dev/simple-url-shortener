@@ -2,9 +2,10 @@ package config
 
 import (
 	"flag"
-	"github.com/stretchr/testify/assert"
 	"os"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // Вспомогательная функция сброса состояния флагов, так как при использовании InitConfig() запускается flag.Parse().
