@@ -14,12 +14,19 @@ import (
 	"go.uber.org/zap"
 )
 
+// Claims Описывает набор JWT-утверждений,
+// используемых для аутентификации пользователя.
 type Claims struct {
 	jwt.RegisteredClaims
 	UserID string
 }
 
+// TokenExp Определяет время жизни JWT-токена.
+// Значение должно задаваться через конфигурацию или переменные окружения.
 const TokenExp = time.Hour * 24
+
+// SecretKey Используется для подписи и проверки JWT-токенов.
+// Значение должно задаваться через конфигурацию или переменные окружения.
 const SecretKey = "SuperSecretKey"
 
 // BuildJWTToken Создание JWT-токена.
