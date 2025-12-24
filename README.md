@@ -115,11 +115,11 @@ go run cmd/shortener/main.go
 
 ```bash
 # Запуск с БД
-./shortener -l=true -ll Debug -d 'host=localhost port=5432 user=username password=user_password dbname=user_dbname sslmode=disable'
+./shortener -l=true -ll Debug -e 12h -k UIfuBer431qY1 -d 'host=localhost port=5432 user=username password=user_password dbname=user_dbname sslmode=disable'
 # Запуск с файловым хранилищем
-./shortener -l=true -ll Debug -f "/tmp/short-url-storage-filedb.json"
+./shortener -l=true -ll Debug -e 12h -k UIfuBer431qY1 -f "/tmp/short-url-storage-filedb.json"
 # Запуск с хранилищем в памяти
-./shortener -l=true -ll Debug -f ""
+./shortener -l=true -ll Debug -e 12h -k UIfuBer431qY1 -f ""
 ```
 
 Описание флагов:
@@ -128,7 +128,9 @@ go run cmd/shortener/main.go
 -a  Адрес и порт HTTP-сервера (по умолчанию "localhost:8080")
 -b  Базовый URL сервиса (по умолчанию "http://localhost:8080")
 -d  Строка подключения к PostgreSQL (пример: `host=localhost port=5432 user=db_user password=xxxxx dbname=db_name sslmode=disable`)
+-e  Время действия JWT-токена. Пример: 24h, 45m, 60s и т.д. (по умолчанию 24h0m0s)
 -f  Путь до файла хранения (по умолчанию используется "/tmp/short-url-storage.json")
+-k  Секретный ключ для подписи JWT-токена. Пример: UIfuBer431qY1crEUgzIem9 (по умолчанию "Change_Me_On_Production")
 -l  Включение логгирования (по умолчанию true)
 -ll Выбор уровня логгирования (по умолчанию Info, возможные варианты - Debug, Info, Warn, Error, DPanic, Panic, Fatal)
 ```
