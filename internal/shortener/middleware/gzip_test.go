@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/handlers"
@@ -81,7 +82,9 @@ func (ms *MockStorage) GetFromStorage(ctx context.Context, shortURL string) (str
 
 func TestGzipCompressorMiddleware(t *testing.T) {
 	storage := MockStorage{mockData: map[string]string{"shortURL": "https://example.com"}}
-	testApp := handlers.NewAppHandler(&storage)
+	secretKey := "Secret_Key"
+	tokenExp := 10 * time.Minute
+	testApp := handlers.NewAppHandler(&storage, secretKey, tokenExp)
 
 	mockHandler := GzipCompressorMiddleware(http.HandlerFunc(testApp.PostHandler))
 	testSrv := httptest.NewServer(mockHandler)
@@ -159,7 +162,9 @@ func TestGzipCompressorMiddleware(t *testing.T) {
 
 func TestGzipDecompressorMiddleware(t *testing.T) {
 	storage := MockStorage{mockData: map[string]string{"shortURL": "https://example.com"}}
-	testApp := handlers.NewAppHandler(&storage)
+	secretKey := "Secret_Key"
+	tokenExp := 10 * time.Minute
+	testApp := handlers.NewAppHandler(&storage, secretKey, tokenExp)
 
 	mockHandler := GzipDecompressorMiddleware(http.HandlerFunc(testApp.PostHandler))
 	testSrv := httptest.NewServer(mockHandler)

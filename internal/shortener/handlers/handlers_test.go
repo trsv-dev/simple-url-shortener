@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/contextkeys"
@@ -149,7 +150,10 @@ func TestGetHandler(t *testing.T) {
 			r := httptest.NewRequest(tt.requestMethod, tt.shortURL, nil)
 			w := httptest.NewRecorder()
 
-			h := NewAppHandler(mockStorage)
+			secretKey := "Secret_Key"
+			tokenExp := 10 * time.Minute
+
+			h := NewAppHandler(mockStorage, secretKey, tokenExp)
 			h.GetHandler(w, r)
 
 			res := w.Result()
@@ -202,7 +206,10 @@ func TestPostHandler(t *testing.T) {
 			r := httptest.NewRequest(tt.requestMethod, tt.URL, body)
 			w := httptest.NewRecorder()
 
-			h := NewAppHandler(mockStorage)
+			secretKey := "Secret_Key"
+			tokenExp := 10 * time.Minute
+
+			h := NewAppHandler(mockStorage, secretKey, tokenExp)
 			h.PostHandler(w, r)
 			res := w.Result()
 			defer res.Body.Close()
@@ -255,7 +262,10 @@ func TestAPIShorten(t *testing.T) {
 			r := httptest.NewRequest(tt.requestMethod, tt.URL, body)
 			w := httptest.NewRecorder()
 
-			h := NewAppHandler(mockStorage)
+			secretKey := "Secret_Key"
+			tokenExp := 10 * time.Minute
+
+			h := NewAppHandler(mockStorage, secretKey, tokenExp)
 			h.APIShorten(w, r)
 			res := w.Result()
 			defer res.Body.Close()
@@ -344,7 +354,10 @@ func TestAppHandler_Batch(t *testing.T) {
 
 	for _, tt := range testTable {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewAppHandler(mockStorage)
+			secretKey := "Secret_Key"
+			tokenExp := 10 * time.Minute
+
+			h := NewAppHandler(mockStorage, secretKey, tokenExp)
 			body := strings.NewReader(tt.requestBody)
 			r := httptest.NewRequest(tt.method, URL, body)
 			w := httptest.NewRecorder()
@@ -365,7 +378,10 @@ func TestAppHandler_UserURLs(t *testing.T) {
 		mockData: map[string]string{"https://example.com": "shortURL"},
 	}
 
-	h := NewAppHandler(mockStorage)
+	secretKey := "Secret_Key"
+	tokenExp := 10 * time.Minute
+
+	h := NewAppHandler(mockStorage, secretKey, tokenExp)
 	URL := "/api/user/urls"
 
 	testTable := []struct {
@@ -430,7 +446,10 @@ func TestAppHandler_Delete(t *testing.T) {
 		mockData: map[string]string{"https://example.com": "shortURL"},
 	}
 
-	h := NewAppHandler(mockStorage)
+	secretKey := "Secret_Key"
+	tokenExp := 10 * time.Minute
+
+	h := NewAppHandler(mockStorage, secretKey, tokenExp)
 	URL := "/api/user/urls"
 
 	testTable := []struct {

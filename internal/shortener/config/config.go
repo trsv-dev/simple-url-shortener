@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"time"
 )
 
 // Config Структура для хранения данных о конфигурации сервера.
@@ -15,6 +16,8 @@ type Config struct {
 	LogLevel      string
 	FileDB        string
 	DatabaseDSN   string
+	SecretKey     string
+	TokenExp      time.Duration
 }
 
 // ServerConfig Указатель на структуру, получаемую после инициализации структуры в InitConfig()
@@ -31,6 +34,8 @@ func InitConfig() *Config {
 	flag.StringVar(&config.LogLevel, "ll", "Info", "Log level for logging (Debug, Info, Warn, Error, DPanic, Panic, Fatal)")
 	flag.StringVar(&config.FileDB, "f", "/tmp/short-url-storage.json", "Set JSON file to save short URLs. To disable this feature - set empty key")
 	flag.StringVar(&config.DatabaseDSN, "d", "", "Data source name for DB. Example for PostgreSQL: -d 'host=localhost port=5432 user=db_user password=xxxxx dbname=db_name sslmode=disable'")
+	flag.StringVar(&config.SecretKey, "k", "Change_Me_On_Production", "Secret key for signing JWT token. Example: UIfuBer431qY1crEUgzIem9")
+	flag.DurationVar(&config.TokenExp, "e", 24*time.Hour, "JWT token expiration time. Example: 24h, 45m, 60s, etc")
 
 	flag.Parse()
 
@@ -40,6 +45,8 @@ func InitConfig() *Config {
 	OverrideFromEnv(&config.LogLevel, "LOG_LEVEL")
 	OverrideFromEnv(&config.FileDB, "FILE_STORAGE_PATH")
 	OverrideFromEnv(&config.DatabaseDSN, "DATABASE_DSN")
+	OverrideFromEnv(&config.SecretKey, "SECRET_KEY")
+	OverrideFromEnv(&config.TokenExp, "TOKEN_EXP")
 
 	ServerConfig = config
 
@@ -59,6 +66,11 @@ func OverrideFromEnv(structFiled interface{}, envKey string) {
 			if parsedValue, err := strconv.ParseBool(value); err == nil {
 				*structField = parsedValue
 			}
+		// если тип structField - time.Duration
+		case *time.Duration:
+			if duration, err := time.ParseDuration(value); err == nil {
+				*structField = duration
+			}
 		default:
 			return
 		}
@@ -77,6 +89,8 @@ func GetServerConfig() *Config {
 			LogLevel:      "Info",
 			FileDB:        "/tmp/short-url-storage.json",
 			DatabaseDSN:   "",
+			SecretKey:     "Change_Me_On_Production",
+			TokenExp:      24 * time.Hour,
 		}
 		return defaultConfig
 	}

@@ -37,19 +37,23 @@ func InitLogger(level string) error {
 	return nil
 }
 
-// Структура для хранения данных ответа.
+// responseData хранит метаданные HTTP-ответа,
+// необходимые для логирования.
 type responseData struct {
 	status int
 	size   int
 }
 
-// Структура, которой можно подменить оригинальный http.ResponseWriter
-// для получения ответа и записи ответа в лог.
+// loggingResponseWriter — обёртка над http.ResponseWriter,
+// позволяющая перехватывать код статуса и размер ответа
+// для последующего логирования.
 type loggingResponseWriter struct {
 	http.ResponseWriter
 	responseData *responseData
 }
 
+// Write Проксирует запись тела ответа в оригинальный ResponseWriter
+// и накапливает количество записанных байт.
 func (r *loggingResponseWriter) Write(b []byte) (int, error) {
 	// записываем ответ, используя оригинальный http.ResponseWriter
 	size, err := r.ResponseWriter.Write(b)
@@ -59,6 +63,11 @@ func (r *loggingResponseWriter) Write(b []byte) (int, error) {
 	return size, err
 }
 
+// WriteHeader проксирует установку HTTP-статуса
+// и сохраняет его для логирования.
+//
+// Если WriteHeader не был вызван явно,
+// стандартный http.Server использует статус 200.
 func (r *loggingResponseWriter) WriteHeader(statusCode int) {
 	// записываем код статуса, используя оригинальный http.ResponseWrite
 	r.ResponseWriter.WriteHeader(statusCode)

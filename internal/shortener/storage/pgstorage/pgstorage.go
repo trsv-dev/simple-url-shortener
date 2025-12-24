@@ -24,13 +24,18 @@ import (
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/utils"
 )
 
+// Length Определяет длину генерируемого короткого URL.
 const length = 8
 
+// PgStorage Реализация интерфейса Storage для хранилища URL-ов на PostgreSQL.
 type PgStorage struct {
 	DB        *sql.DB
 	Generator generator.URLGenerator
 }
 
+// InitStorage Инициализирует PostgreSQL-хранилище:
+// устанавливает соединение с БД, проверяет доступность
+// и подготавливает необходимую схему.
 func InitStorage() (*PgStorage, error) {
 
 	logger.Log.Info("Для хранения данных используется PostgreSQL")
@@ -70,6 +75,8 @@ func InitStorage() (*PgStorage, error) {
 	return pgstore, nil
 }
 
+// IsLongURLExists Проверяет наличие длинного URL в хранилище
+// и возвращает связанный с ним shortURL, если он существует.
 func (pg *PgStorage) IsLongURLExists(longURL string) (string, error) {
 	var shortURL string
 
@@ -86,6 +93,9 @@ func (pg *PgStorage) IsLongURLExists(longURL string) (string, error) {
 	return shortURL, nil
 }
 
+// SetInStorage Сохраняет длинный URL в хранилище.
+// Если URL уже существует, возвращает ErrLongURLConflict.
+// При коллизии shortURL выполняет повторные попытки генерации.
 func (pg *PgStorage) SetInStorage(ctx context.Context, longURL string) (string, error) {
 	if !utils.IsValidURL(longURL) {
 		return "", fmt.Errorf("передан невалидный URL")
@@ -144,6 +154,9 @@ func (pg *PgStorage) SetInStorage(ctx context.Context, longURL string) (string, 
 	return "", fmt.Errorf("невозможно сгенерировать уникальный shortURL, возможны коллизии")
 }
 
+// SetBatchInStorage Сохраняет набор URL-ов в рамках одной транзакции.
+// При повторяющемся long_url возвращает существующий short_url.
+// В случае ошибки выполняет откат транзакции.
 func (pg *PgStorage) SetBatchInStorage(ctx context.Context, batch []models.BatchItem) error {
 	baseURL := config.GetServerConfig().BaseURL
 
@@ -211,6 +224,8 @@ func (pg *PgStorage) SetBatchInStorage(ctx context.Context, batch []models.Batch
 	return nil
 }
 
+// GetFromStorage Возвращает оригинальный URL по короткому идентификатору.
+// Если URL помечен как удалённый, возвращает ErrURLDeleted.
 func (pg *PgStorage) GetFromStorage(ctx context.Context, shortURL string) (string, error) {
 	//var longURL string
 
@@ -244,6 +259,7 @@ func (pg *PgStorage) GetFromStorage(ctx context.Context, shortURL string) (strin
 	return URL.longURL, nil
 }
 
+// GetUserURLs Возвращает список URL-ов, принадлежащих пользователю из контекста.
 func (pg *PgStorage) GetUserURLs(ctx context.Context) ([]models.BatchItem, error) {
 	var urls []models.BatchItem
 	baseURL := config.GetServerConfig().BaseURL
@@ -285,6 +301,7 @@ func (pg *PgStorage) GetUserURLs(ctx context.Context) ([]models.BatchItem, error
 	return urls, nil
 }
 
+// MarkAsDelete Помечает указанные shortURL как удалённые для пользователя из контекста.
 func (pg *PgStorage) MarkAsDelete(ctx context.Context, URLs []string) error {
 	// извлекаем userID из контекста
 	ctxUserID, ok := ctx.Value(contextkeys.UserID).(string)
@@ -323,6 +340,7 @@ func (pg *PgStorage) MarkAsDelete(ctx context.Context, URLs []string) error {
 	return nil
 }
 
+// CleanUp Физически удаляет из хранилища все URL, ранее помеченные как удалённые.
 func (pg *PgStorage) CleanUp(ctx context.Context) error {
 	Result, err := pg.DB.ExecContext(ctx, `DELETE FROM urls WHERE is_deleted = TRUE`)
 	if err != nil {
@@ -340,6 +358,7 @@ func (pg *PgStorage) CleanUp(ctx context.Context) error {
 	return nil
 }
 
+// Ping Проверяет доступность PostgreSQL с таймаутом.
 func (pg *PgStorage) Ping(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, 1*time.Second)
 	defer cancel()
@@ -352,6 +371,7 @@ func (pg *PgStorage) Ping(ctx context.Context) error {
 	return nil
 }
 
+// Close Закрывает соединение с базой данных.
 func (pg *PgStorage) Close() error {
 	return pg.DB.Close()
 }
