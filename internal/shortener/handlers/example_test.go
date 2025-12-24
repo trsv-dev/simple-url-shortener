@@ -5,9 +5,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"time"
 )
 
 func ExampleAppHandler_PostHandler() {
+	secretKey := "Secret_Key"
+	tokenExp := 10 * time.Minute
+
 	// имитируем хранилище с заранее известной связкой "длинный URL → короткий URL"
 	storage := &MockStorage{
 		mockData: map[string]string{
@@ -16,7 +20,7 @@ func ExampleAppHandler_PostHandler() {
 	}
 
 	// создаём обработчик приложения с этим хранилищем
-	h := NewAppHandler(storage)
+	h := NewAppHandler(storage, secretKey, tokenExp)
 
 	// формируем HTTP-запрос на POST с длинным URL в теле
 	r := httptest.NewRequest(
@@ -49,8 +53,12 @@ func ExampleAppHandler_GetHandler() {
 			"shortURL": "https://example.com",
 		},
 	}
+
+	secretKey := "Secret_Key"
+	tokenExp := 10 * time.Minute
+
 	// создаём обработчик приложения с этим хранилищем
-	h := NewAppHandler(storage)
+	h := NewAppHandler(storage, secretKey, tokenExp)
 
 	// формируем HTTP-запрос GET по короткой ссылке.
 	r := httptest.NewRequest(http.MethodGet, "/shortURL", nil)
@@ -80,8 +88,11 @@ func ExampleAppHandler_APIShorten() {
 		},
 	}
 
+	secretKey := "Secret_Key"
+	tokenExp := 10 * time.Minute
+
 	// создаём обработчик приложения с этим хранилищем
-	h := NewAppHandler(storage)
+	h := NewAppHandler(storage, secretKey, tokenExp)
 
 	// формируем HTTP-запрос POST с JSON-телом
 	r := httptest.NewRequest(

@@ -14,7 +14,7 @@ func Router(h *handlers.AppHandler) *chi.Mux {
 
 	router.Use(
 		logger.RequestAndResponseLogger,
-		middleware.AuthMiddleware,
+		middleware.AuthMiddleware(h.SecretKey, h.TokenExp),
 		middleware.GzipDecompressorMiddleware,
 		middleware.GzipCompressorMiddleware,
 	)

@@ -93,6 +93,10 @@ FILE_STORAGE_PATH=
 # Если не задан DATABASE_DSN - будет использовано файловое хранилище
 # Пример: 'host=localhost port=5432 user=db_user password=xxxxx dbname=db_name sslmode=disable'
 DATABASE_DSN=
+# Секретный ключ для подписи JWT-токенов
+SECRET_KEY=SuperSecretKey
+# Время жизни JWT-токена. Можно указывать в формате TOKEN_EXP=24h, TOKEN_EXP=30m, TOKEN_EXP=3600s
+TOKEN_EXP=24h
 ```
 
 ### 5. Запустите приложение

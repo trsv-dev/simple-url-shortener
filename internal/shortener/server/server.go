@@ -33,7 +33,7 @@ func NewServer() (*http.Server, storage.Storage, error) {
 	// в зависимости от конфигурации устанавливаем тип хранилища.
 	URLs := storage.SelectStorage(cfg)
 
-	h := handlers.NewAppHandler(URLs)
+	h := handlers.NewAppHandler(URLs, cfg.SecretKey, cfg.TokenExp)
 	mux := router.Router(h)
 
 	// Логируем запуск сервера.

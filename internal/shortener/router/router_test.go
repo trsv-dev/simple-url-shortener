@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -110,8 +111,9 @@ func TestRouter(t *testing.T) {
 		mockStorage := &MockStorage{
 			mockData: map[string]string{"shortURL": "https://example.com"},
 		}
-
-		h := handlers.NewAppHandler(mockStorage)
+		secretKey := "Secret_Key"
+		tokenExp := 10 * time.Minute
+		h := handlers.NewAppHandler(mockStorage, secretKey, tokenExp)
 		mux := Router(h)
 
 		t.Run(tt.name, func(t *testing.T) {
@@ -148,7 +150,9 @@ func TestRouterIntegration(t *testing.T) {
 		mockData: map[string]string{"shortURL": "https://example.com"},
 	}
 
-	h := handlers.NewAppHandler(mockStorage)
+	secretKey := "Secret_Key"
+	tokenExp := 10 * time.Minute
+	h := handlers.NewAppHandler(mockStorage, secretKey, tokenExp)
 	testServer := httptest.NewServer(Router(h))
 	defer testServer.Close()
 

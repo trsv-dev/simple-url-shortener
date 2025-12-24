@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/config"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/contextkeys"
@@ -19,7 +20,9 @@ import (
 // Возвращает AppHandler для бенчамрка.
 func getBenchmarkAppHandler() *AppHandler {
 	memStore := memory.InitStorage()
-	handler := NewAppHandler(memStore)
+	secretKey := "Bench_Secret_Key"
+	tokenExp := 10 * time.Minute
+	handler := NewAppHandler(memStore, secretKey, tokenExp)
 
 	return handler
 }

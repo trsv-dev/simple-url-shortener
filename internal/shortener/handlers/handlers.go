@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/config"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/errs"
@@ -18,12 +19,14 @@ import (
 
 // AppHandler Структура для работы с зависимостями хендлеров.
 type AppHandler struct {
-	storage storage.Storage
+	storage   storage.Storage
+	SecretKey string
+	TokenExp  time.Duration
 }
 
 // NewAppHandler Конструктор AppHandler.
-func NewAppHandler(s storage.Storage) *AppHandler {
-	return &AppHandler{storage: s}
+func NewAppHandler(s storage.Storage, secretKey string, tokenExp time.Duration) *AppHandler {
+	return &AppHandler{storage: s, SecretKey: secretKey, TokenExp: tokenExp}
 }
 
 // PostHandler Функция обработки запроса к "/".
