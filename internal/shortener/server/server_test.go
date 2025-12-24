@@ -10,6 +10,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/config"
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/handlers"
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/storage/memory"
 )
 
 func resetFlags() {
@@ -20,7 +23,14 @@ func TestNewServer(t *testing.T) {
 	// сбрасываем флаги
 	resetFlags()
 
-	server, _, err := NewServer()
+	// получаем конфигурацию сервера по умолчанию
+	cfg := config.GetServerConfig()
+
+	// создаём минимальное тестовое хранилище
+	URLStorage := memory.InitStorage()
+	appHandler := handlers.NewAppHandler(URLStorage, "secret", 1*time.Hour)
+
+	server, err := NewServer(cfg.ServerAddress, appHandler)
 	assert.NoError(t, err)
 
 	go func() {
@@ -48,11 +58,18 @@ func TestRunServer(t *testing.T) {
 	// сбрасываем флаги
 	resetFlags()
 
+	// получаем конфигурацию сервера по умолчанию
+	cfg := config.GetServerConfig()
+
+	// создаём минимальное тестовое хранилище
+	URLStorage := memory.InitStorage()
+	appHandler := handlers.NewAppHandler(URLStorage, "secret", 1*time.Hour)
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Запускаем сервер в горутине
 	go func() {
-		_, err := RunServer(ctx)
+		err := RunServer(ctx, cfg.ServerAddress, appHandler)
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			t.Errorf("Ошибка при запуске сервера: %v", err)
 		}

@@ -4,13 +4,10 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"time"
 
-	"github.com/trsv-dev/simple-url-shortener/internal/shortener/config"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/handlers"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/logger"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/router"
-	"github.com/trsv-dev/simple-url-shortener/internal/shortener/storage"
 	"go.uber.org/zap"
 )
 
@@ -20,41 +17,21 @@ import (
 //
 // Возвращает сконфигурированный http.Server,
 // используемое хранилище и ошибку инициализации, если она возникла.
-func NewServer() (*http.Server, storage.Storage, error) {
-	cfg := config.InitConfig()
-
-	// если логирование включено и уровень логирования валидный - запускаем логгер.
-	if cfg.Logging && logger.IsValidLogLevel(cfg.LogLevel) {
-		if err := logger.InitLogger(cfg.LogLevel); err != nil {
-			return nil, nil, err
-		}
-	}
-
-	// в зависимости от конфигурации устанавливаем тип хранилища.
-	URLs := storage.SelectStorage(cfg)
-
-	h := handlers.NewAppHandler(URLs, cfg.SecretKey, cfg.TokenExp)
-	mux := router.Router(h)
-
-	// Логируем запуск сервера.
-	logger.Log.Info("Server is running",
-		zap.String("address", cfg.ServerAddress),
-		zap.String("log_level", cfg.LogLevel),
-	)
+func NewServer(serverAddress string, appHandler *handlers.AppHandler) (*http.Server, error) {
+	mux := router.Router(appHandler)
 
 	return &http.Server{
-			Addr:    cfg.ServerAddress,
+			Addr:    serverAddress,
 			Handler: mux,
 		},
-		URLs,
 		nil
 }
 
 // RunServer Запуск сервера.
-func RunServer(ctx context.Context) (storage.Storage, error) {
-	server, storage, err := NewServer()
+func RunServer(ctx context.Context, serverAddress string, appHandler *handlers.AppHandler) error {
+	server, err := NewServer(serverAddress, appHandler)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// запускаем ListenAndServe() в горутине, чтобы он не блокировал управление на себя и была возможность
@@ -62,26 +39,6 @@ func RunServer(ctx context.Context) (storage.Storage, error) {
 	go func() {
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Log.Error("Ошибка запуска сервера", zap.Error(err))
-		}
-	}()
-
-	// запускаем горутину, которая через временные промежутки делает удаление помеченных (is_delete=True) URL
-	go func() {
-		ticker := time.NewTicker(3 * time.Minute)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ticker.C:
-				err = storage.CleanUp(ctx)
-				if err != nil {
-					logger.Log.Error("Ошибка удаления URL", zap.Error(err))
-				}
-
-			case <-ctx.Done():
-				logger.Log.Info("Горутина для фонового удаления URL завершена")
-				return
-			}
 		}
 	}()
 
@@ -93,9 +50,9 @@ func RunServer(ctx context.Context) (storage.Storage, error) {
 	err = server.Shutdown(ctx)
 	if err != nil {
 		logger.Log.Error("Ошибка остановки сервера", zap.Error(err))
-		return nil, err
+		return err
 	}
 
 	logger.Log.Info("Сервер остановлен")
-	return storage, nil
+	return nil
 }
