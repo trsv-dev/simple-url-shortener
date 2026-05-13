@@ -18,8 +18,11 @@ jobs:
 
   shortenertest:
     runs-on: ubuntu-latest
-    container: golang:1.24
+    container: golang:1.26
     needs: branchtest
+
+    env:
+      DATABASE_CONN_STRING: "postgres://postgres:postgres@postgres:5432/praktikum?sslmode=disable"
 
     services:
       postgres:
@@ -49,8 +52,9 @@ jobs:
       - name: Setup autotest binary
         run: |
           chmod -R +x $GITHUB_WORKSPACE/.tools
-          mv $GITHUB_WORKSPACE/.tools/shortenertestbeta /usr/local/bin/shortenertestbeta
+          mv $GITHUB_WORKSPACE/.tools/shortenertest_v2 /usr/local/bin/shortenertest
           mv $GITHUB_WORKSPACE/.tools/random /usr/local/bin/random
+          mv $GITHUB_WORKSPACE/.tools/wipedb /usr/local/bin/wipedb
 
       - name: Setup go deps
         run: |
@@ -89,7 +93,7 @@ jobs:
           github.head_ref == 'iter23' ||
           github.head_ref == 'iter24'
         run: |
-          shortenertestbeta -test.v -test.run=^TestIteration1$ \
+          shortenertest -test.v -test.run=^TestIteration1$ \
               -binary-path=cmd/shortener/shortener
 
       - name: "Code increment #2"
@@ -119,7 +123,7 @@ jobs:
           github.head_ref == 'iter23' ||
           github.head_ref == 'iter24'
         run: |
-          shortenertestbeta -test.v -test.run=^TestIteration2$ -source-path=.
+          shortenertest -test.v -test.run=^TestIteration2$ -source-path=.
 
       - name: "Code increment #3"
         if: |
@@ -147,7 +151,7 @@ jobs:
           github.head_ref == 'iter23' ||
           github.head_ref == 'iter24'
         run: |
-          shortenertestbeta -test.v -test.run=^TestIteration3$ -source-path=.
+          shortenertest -test.v -test.run=^TestIteration3$ -source-path=.
 
       - name: "Code increment #4"
         if: |
@@ -175,7 +179,7 @@ jobs:
           github.head_ref == 'iter24'
         run: |
           SERVER_PORT=$(random unused-port)
-          shortenertestbeta -test.v -test.run=^TestIteration4$ \
+          shortenertest -test.v -test.run=^TestIteration4$ \
               -binary-path=cmd/shortener/shortener \
               -server-port=$SERVER_PORT
 
@@ -204,7 +208,7 @@ jobs:
           github.head_ref == 'iter24'
         run: |
           SERVER_PORT=$(random unused-port)
-          shortenertestbeta -test.v -test.run=^TestIteration5$ \
+          shortenertest -test.v -test.run=^TestIteration5$ \
               -binary-path=cmd/shortener/shortener \
               -server-port=$SERVER_PORT
 
@@ -231,7 +235,7 @@ jobs:
           github.head_ref == 'iter23' ||
           github.head_ref == 'iter24'
         run: |
-          shortenertestbeta -test.v -test.run=^TestIteration6$ \
+          shortenertest -test.v -test.run=^TestIteration6$ \
               -source-path=.
 
       - name: "Code increment #7"
@@ -256,7 +260,7 @@ jobs:
           github.head_ref == 'iter23' ||
           github.head_ref == 'iter24'
         run: |
-          shortenertestbeta -test.v -test.run=^TestIteration7$ \
+          shortenertest -test.v -test.run=^TestIteration7$ \
               -binary-path=cmd/shortener/shortener \
               -source-path=.
 
@@ -281,7 +285,7 @@ jobs:
           github.head_ref == 'iter23' ||
           github.head_ref == 'iter24'
         run: |
-          shortenertestbeta -test.v -test.run=^TestIteration8$ \
+          shortenertest -test.v -test.run=^TestIteration8$ \
               -binary-path=cmd/shortener/shortener
 
       - name: "Code increment #9"
@@ -305,7 +309,7 @@ jobs:
           github.head_ref == 'iter24'
         run: |
           TEMP_FILE=$(random tempfile)
-          shortenertestbeta -test.v -test.run=^TestIteration9$ \
+          shortenertest -test.v -test.run=^TestIteration9$ \
               -binary-path=cmd/shortener/shortener \
               -source-path=. \
               -file-storage-path=$TEMP_FILE
@@ -329,10 +333,11 @@ jobs:
           github.head_ref == 'iter23' ||
           github.head_ref == 'iter24'
         run: |
-          shortenertestbeta -test.v -test.run=^TestIteration10$ \
+          shortenertest -test.v -test.run=^TestIteration10$ \
               -binary-path=cmd/shortener/shortener \
               -source-path=. \
-              -database-dsn='postgres://postgres:postgres@postgres:5432/praktikum?sslmode=disable'
+              -database-dsn=$DATABASE_CONN_STRING
+          wipedb $DATABASE_CONN_STRING
 
       - name: "Code increment #11"
         if: |
@@ -352,9 +357,10 @@ jobs:
           github.head_ref == 'iter23' ||
           github.head_ref == 'iter24'
         run: |
-          shortenertestbeta -test.v -test.run=^TestIteration11$ \
+          shortenertest -test.v -test.run=^TestIteration11$ \
               -binary-path=cmd/shortener/shortener \
-              -database-dsn='postgres://postgres:postgres@postgres:5432/praktikum?sslmode=disable'
+              -database-dsn=$DATABASE_CONN_STRING
+          wipedb $DATABASE_CONN_STRING
 
       - name: "Code increment #12"
         if: |
@@ -373,9 +379,10 @@ jobs:
           github.head_ref == 'iter23' ||
           github.head_ref == 'iter24'
         run: |
-          shortenertestbeta -test.v -test.run=^TestIteration12$ \
+          shortenertest -test.v -test.run=^TestIteration12$ \
               -binary-path=cmd/shortener/shortener \
-              -database-dsn='postgres://postgres:postgres@postgres:5432/praktikum?sslmode=disable'
+              -database-dsn=$DATABASE_CONN_STRING
+          wipedb $DATABASE_CONN_STRING
 
       - name: "Code increment #13"
         if: |
@@ -393,9 +400,10 @@ jobs:
           github.head_ref == 'iter23' ||
           github.head_ref == 'iter24'
         run: |
-          shortenertestbeta -test.v -test.run=^TestIteration13$ \
+          shortenertest -test.v -test.run=^TestIteration13$ \
               -binary-path=cmd/shortener/shortener \
-              -database-dsn='postgres://postgres:postgres@postgres:5432/praktikum?sslmode=disable'
+              -database-dsn=$DATABASE_CONN_STRING
+          wipedb $DATABASE_CONN_STRING
 
       - name: "Code increment #14"
         if: |
@@ -412,9 +420,10 @@ jobs:
           github.head_ref == 'iter23' ||
           github.head_ref == 'iter24'
         run: |
-          shortenertestbeta -test.v -test.run=^TestIteration14$ \
+          shortenertest -test.v -test.run=^TestIteration14$ \
               -binary-path=cmd/shortener/shortener \
-              -database-dsn='postgres://postgres:postgres@postgres:5432/praktikum?sslmode=disable'
+              -database-dsn=$DATABASE_CONN_STRING
+          wipedb $DATABASE_CONN_STRING
 
       - name: "Code increment #15"
         if: |
@@ -430,9 +439,10 @@ jobs:
           github.head_ref == 'iter23' ||
           github.head_ref == 'iter24'
         run: |
-          shortenertestbeta -test.v -test.run=^TestIteration15$ \
+          shortenertest -test.v -test.run=^TestIteration15$ \
               -binary-path=cmd/shortener/shortener \
-              -database-dsn='postgres://postgres:postgres@postgres:5432/praktikum?sslmode=disable'
+              -database-dsn=$DATABASE_CONN_STRING
+          wipedb $DATABASE_CONN_STRING
 
       - name: "Code increment #16"
         if: |
@@ -447,7 +457,7 @@ jobs:
           github.head_ref == 'iter23' ||
           github.head_ref == 'iter24'
         run: |
-          shortenertestbeta -test.v -test.run=^TestIteration16$ \
+          shortenertest -test.v -test.run=^TestIteration16$ \
               -source-path=. \
 
       - name: "Code increment #17"
@@ -462,7 +472,7 @@ jobs:
           github.head_ref == 'iter23' ||
           github.head_ref == 'iter24'
         run: |
-          shortenertestbeta -test.v -test.run=^TestIteration17$ \
+          shortenertest -test.v -test.run=^TestIteration17$ \
               -source-path=. \
 
       - name: "Code increment #18"
@@ -476,5 +486,5 @@ jobs:
           github.head_ref == 'iter23' ||
           github.head_ref == 'iter24'
         run: |
-          shortenertestbeta -test.v -test.run=^TestIteration18$ \
+          shortenertest -test.v -test.run=^TestIteration18$ \
               -source-path=. \
