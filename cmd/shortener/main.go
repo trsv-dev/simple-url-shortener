@@ -18,7 +18,32 @@ import (
 	"go.uber.org/zap"
 )
 
+var (
+	buildVersion string
+	buildDate    string
+	buildCommit  string
+)
+
+// Выводит значение переменной, и если оно пустое, присваивает значение по умолчанию (`N/A`).
+func valueOrNA(s string) string {
+	if s == "" {
+		return "N/A"
+	}
+
+	return s
+}
+
+// Выводит в Stdout инфо о сборке.
+func printBuildInfo() {
+	fmt.Printf("Build version: %s\n", valueOrNA(buildVersion))
+	fmt.Printf("Build date: %s\n", valueOrNA(buildDate))
+	fmt.Printf("Build commit: %s\n", valueOrNA(buildCommit))
+}
+
 func main() {
+
+	printBuildInfo()
+
 	// recover для логирования паник в main
 	defer func() {
 		if r := recover(); r != nil {
