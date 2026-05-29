@@ -116,7 +116,7 @@ func main() {
 		}
 	}()
 
-	err := server.RunServer(ctx, cfg.ServerAddress, appHandler)
+	err := server.RunServer(ctx, cfg.ServerAddress, cfg.EnableHTTPS, appHandler)
 	if err != nil {
 		panic(err)
 	}

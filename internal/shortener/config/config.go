@@ -18,6 +18,7 @@ type Config struct {
 	DatabaseDSN   string
 	SecretKey     string
 	TokenExp      time.Duration
+	EnableHTTPS   bool
 }
 
 // ServerConfig Указатель на структуру, получаемую после инициализации структуры в InitConfig()
@@ -36,6 +37,7 @@ func InitConfig() *Config {
 	flag.StringVar(&config.DatabaseDSN, "d", "", "Data source name for DB. Example for PostgreSQL: -d 'host=localhost port=5432 user=db_user password=xxxxx dbname=db_name sslmode=disable'")
 	flag.StringVar(&config.SecretKey, "k", "Change_Me_On_Production", "Secret key for signing JWT token. Example: UIfuBer431qY1crEUgzIem9")
 	flag.DurationVar(&config.TokenExp, "e", 24*time.Hour, "JWT token expiration time. Example: 24h, 45m, 60s, etc")
+	flag.BoolVar(&config.EnableHTTPS, "s", false, "Enable or disable HTTPS by -s=true or -s=false. Default: false")
 
 	flag.Parse()
 
@@ -47,6 +49,7 @@ func InitConfig() *Config {
 	OverrideFromEnv(&config.DatabaseDSN, "DATABASE_DSN")
 	OverrideFromEnv(&config.SecretKey, "SECRET_KEY")
 	OverrideFromEnv(&config.TokenExp, "TOKEN_EXP")
+	OverrideFromEnv(&config.EnableHTTPS, "ENABLE_HTTPS")
 
 	ServerConfig = config
 
@@ -91,6 +94,7 @@ func GetServerConfig() *Config {
 			DatabaseDSN:   "",
 			SecretKey:     "Change_Me_On_Production",
 			TokenExp:      24 * time.Hour,
+			EnableHTTPS:   false,
 		}
 		return defaultConfig
 	}
