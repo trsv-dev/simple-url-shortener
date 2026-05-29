@@ -30,7 +30,7 @@ func TestNewServer(t *testing.T) {
 	URLStorage := memory.InitStorage()
 	appHandler := handlers.NewAppHandler(URLStorage, "secret", 1*time.Hour)
 
-	server, err := NewServer(cfg.ServerAddress, appHandler)
+	server, err := NewServer(cfg.ServerAddress, appHandler, cfg.EnableHTTPS)
 	assert.NoError(t, err)
 
 	go func() {
@@ -69,7 +69,7 @@ func TestRunServer(t *testing.T) {
 
 	// Запускаем сервер в горутине
 	go func() {
-		err := RunServer(ctx, cfg.ServerAddress, appHandler)
+		err := RunServer(ctx, cfg.ServerAddress, cfg.EnableHTTPS, appHandler)
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			t.Errorf("Ошибка при запуске сервера: %v", err)
 		}
