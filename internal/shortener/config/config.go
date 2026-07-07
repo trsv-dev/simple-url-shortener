@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"flag"
 	"log"
 	"os"
@@ -10,15 +11,16 @@ import (
 
 // Config Структура для хранения данных о конфигурации сервера.
 type Config struct {
-	ServerAddress string
-	BaseURL       string
-	Logging       bool
-	LogLevel      string
-	FileDB        string
-	DatabaseDSN   string
-	SecretKey     string
-	TokenExp      time.Duration
-	EnableHTTPS   bool
+	ServerAddress string        `json:"server_address"`
+	BaseURL       string        `json:"base_url"`
+	Logging       bool          `json:"logging"`
+	LogLevel      string        `json:"log_level"`
+	FileDB        string        `json:"file_db"`
+	DatabaseDSN   string        `json:"database_dsn"`
+	SecretKey     string        `json:"secret_key"`
+	TokenExp      time.Duration `json:"token_exp"`
+	EnableHTTPS   bool          `json:"enable_https"`
+	ConfigFile    string        `json:"-"`
 }
 
 // ServerConfig Указатель на структуру, получаемую после инициализации структуры в InitConfig()
@@ -29,6 +31,8 @@ var ServerConfig *Config
 // (либо конфигурацию по умолчанию).
 func InitConfig() *Config {
 	config := &Config{}
+
+	// получаем данные из флагов
 	flag.StringVar(&config.ServerAddress, "a", "localhost:8080", "HTTP server address")
 	flag.StringVar(&config.BaseURL, "b", "http://localhost:8080", "Base URL for shortened links")
 	flag.BoolVar(&config.Logging, "l", true, "Enable or disable logging by -l=true or -l=false")
@@ -38,9 +42,25 @@ func InitConfig() *Config {
 	flag.StringVar(&config.SecretKey, "k", "Change_Me_On_Production", "Secret key for signing JWT token. Example: UIfuBer431qY1crEUgzIem9")
 	flag.DurationVar(&config.TokenExp, "e", 24*time.Hour, "JWT token expiration time. Example: 24h, 45m, 60s, etc")
 	flag.BoolVar(&config.EnableHTTPS, "s", false, "Enable or disable HTTPS by -s=true or -s=false. Default: false")
+	flag.StringVar(&config.ConfigFile, "c", "", "Set JSON file to load system configuration. Default: file not set")
 
 	flag.Parse()
 
+	// переопределяем имя файла конфигурации из ENV (приоритет выше флага)
+	OverrideFromEnv(&config.ConfigFile, "CONFIG")
+
+	// если файл конфигурации задан (через флаг или ENV), загружаем его;
+	// накладываем на текущий конфиг данные из файла конфигурации;
+	// меняем только те значения, которые были установлены, а не являлись значениями по умолчанию.
+	var fileErr error
+	if config.ConfigFile != "" {
+		config, fileErr = LoadConfigFromFile(config, config.ConfigFile)
+		if fileErr != nil {
+			log.Fatal(fileErr)
+		}
+	}
+
+	// переопределяем все остальные параметры из ENV (наивысший приоритет)
 	OverrideFromEnv(&config.ServerAddress, "SERVER_ADDRESS")
 	OverrideFromEnv(&config.BaseURL, "BASE_URL")
 	OverrideFromEnv(&config.Logging, "LOGGING")
@@ -54,6 +74,76 @@ func InitConfig() *Config {
 	ServerConfig = config
 
 	return config
+}
+
+// GetConfigFile Возвращает конфигурацию сервера на основе переданного файла конфигурации.
+func GetConfigFile(path string) (*Config, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	var config Config
+	err = json.Unmarshal(data, &config)
+	if err != nil {
+		return nil, err
+	}
+
+	return &config, nil
+}
+
+func LoadConfigFromFile(config *Config, path string) (*Config, error) {
+	fileConfig, err := GetConfigFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	usedFlags := map[string]bool{}
+	flag.Visit(func(f *flag.Flag) {
+		usedFlags[f.Name] = true
+	})
+
+	// применяем значения из файла только если:
+	// 1. флаг не был передан явно (!usedFlags)
+	// 2. значение в файле не пустое (!= "")
+
+	if !usedFlags["a"] && fileConfig.ServerAddress != "" {
+		config.ServerAddress = fileConfig.ServerAddress
+	}
+
+	if !usedFlags["b"] && fileConfig.BaseURL != "" {
+		config.BaseURL = fileConfig.BaseURL
+	}
+
+	if !usedFlags["l"] && !fileConfig.Logging {
+		config.Logging = fileConfig.Logging
+	}
+
+	if !usedFlags["ll"] && fileConfig.LogLevel != "" {
+		config.LogLevel = fileConfig.LogLevel
+	}
+
+	if !usedFlags["f"] && fileConfig.FileDB != "" {
+		config.FileDB = fileConfig.FileDB
+	}
+
+	if !usedFlags["d"] && fileConfig.DatabaseDSN != "" {
+		config.DatabaseDSN = fileConfig.DatabaseDSN
+	}
+
+	if !usedFlags["k"] && fileConfig.SecretKey != "" {
+		config.SecretKey = fileConfig.SecretKey
+	}
+
+	if !usedFlags["e"] && fileConfig.TokenExp != 0 {
+		config.TokenExp = fileConfig.TokenExp
+	}
+
+	if !usedFlags["s"] && fileConfig.EnableHTTPS {
+		config.EnableHTTPS = fileConfig.EnableHTTPS
+	}
+
+	return config, nil
 }
 
 // OverrideFromEnv Если заданы переменные окружения и они не пустые - функция пытается
