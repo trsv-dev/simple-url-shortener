@@ -55,6 +55,8 @@ func main() {
 		context.Background(),
 		os.Interrupt,
 		syscall.SIGTERM,
+		syscall.SIGINT,
+		syscall.SIGQUIT,
 	)
 	defer cancel()
 
