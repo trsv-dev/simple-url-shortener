@@ -104,8 +104,8 @@ func LoadConfigFromFile(config *Config, path string) (*Config, error) {
 	})
 
 	// применяем значения из файла только если:
-	// 1. флаг не был передан явно (!usedFlags)
-	// 2. значение в файле не пустое (!= "")
+	// - флаг не был передан явно (!usedFlags)
+	// - значение в файле не пустое (!= "")
 
 	if !usedFlags["a"] && fileConfig.ServerAddress != "" {
 		config.ServerAddress = fileConfig.ServerAddress

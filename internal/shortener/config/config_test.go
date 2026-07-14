@@ -1,20 +1,24 @@
 package config
 
 import (
+	"encoding/json"
 	"flag"
 	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
 
-// Вспомогательная функция сброса состояния флагов, так как при использовании InitConfig() запускается flag.Parse().
-// Однако flag.Parse() можно вызвать только один раз за время выполнения программы, поэтому в каждом тесте, где мы
-// используем InitConfig() необходимо в начале сбросить флаги.
+// resetFlags сбрасывает состояние флагов, потому что в InitConfig() вызывается flag.Parse().
+// flag.Parse() можно вызвать только один раз за программу, поэтому в каждом тесте с InitConfig()
+// нужно в начале очищать флаги.
 func resetFlags() {
 	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
 }
 
+// TestInitConfig проверяет, что InitConfig() Возвращает конфигурацию со значениями по умолчанию.
 func TestInitConfig(t *testing.T) {
 	testTable := []struct {
 		name                  string
@@ -36,6 +40,7 @@ func TestInitConfig(t *testing.T) {
 	}
 }
 
+// TestGetServerConfig Проверяет GetServerConfig() для инициализированной и не инициализированной конфигурации.
 func TestGetServerConfig(t *testing.T) {
 	testTable := []struct {
 		name                 string
@@ -64,7 +69,7 @@ func TestGetServerConfig(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 
 			ServerConfig = tt.serverConfig
-			// Если tt.serverConfig = nil, то GetServerConfig() вернёт конфигурацию сервера по умолчанию.
+			// если tt.serverConfig = nil, то GetServerConfig() вернёт конфигурацию сервера по умолчанию.
 			mockServerConfig := GetServerConfig()
 
 			assert.Equal(t, tt.expectedServerConfig, mockServerConfig)
@@ -72,6 +77,7 @@ func TestGetServerConfig(t *testing.T) {
 	}
 }
 
+// TestOverrideFromEnv Проверяет переопределение значений конфигурации из переменных окружения.
 func TestOverrideFromEnv(t *testing.T) {
 	testTable := []struct {
 		name                 string
@@ -148,6 +154,10 @@ func TestOverrideFromEnv(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			resetFlags()
 
+			// не регистрируем флаги вручную — InitConfig() это сделает;
+			// если нужно имитировать флаги, можно использовать flag.Set после InitConfig(),
+			// но в этих сценариях флаги не задаются явно.
+
 			if tt.envKey1 != "" && tt.envKey2 != "" {
 				os.Setenv(tt.envKey1, tt.envValue1)
 				os.Setenv(tt.envKey2, tt.envValue2)
@@ -176,6 +186,7 @@ func TestOverrideFromEnv(t *testing.T) {
 	}
 }
 
+// TestOverrideFromEnvUnsupportedType Проверяет, что неподдерживаемый тип не перезаписывается из ENV.
 func TestOverrideFromEnvUnsupportedType(t *testing.T) {
 	var unsupportedType float64
 	envKey := "UNSUPPORTED_TYPE"
@@ -184,12 +195,425 @@ func TestOverrideFromEnvUnsupportedType(t *testing.T) {
 	os.Setenv(envKey, envValue)
 	defer os.Unsetenv(envKey)
 
-	// Вызываем OverrideFromEnv с неподдерживаемым типом;
+	// вызываем OverrideFromEnv с неподдерживаемым типом;
 	// переменная unsupportedType не должна перезаписаться
 	OverrideFromEnv(&unsupportedType, envKey)
 
-	// Проверяем, что значение переменной не изменилось
+	// проверяем, что значение переменной не изменилось
 	if unsupportedType != 0 {
 		t.Errorf("Expected unsupportedType to remain 0, got %v", unsupportedType)
 	}
+}
+
+// TestGetConfigFileMissingFile Проверяет GetConfigFile для несуществующего файла.
+func TestGetConfigFileMissingFile(t *testing.T) {
+	path := filepath.Join(os.TempDir(), "nonexistent_config.json")
+
+	cfg, err := GetConfigFile(path)
+
+	assert.Nil(t, cfg)
+	assert.Error(t, err)
+}
+
+// TestGetConfigFileInvalidJSON Проверяет GetConfigFile для некорректного JSON.
+func TestGetConfigFileInvalidJSON(t *testing.T) {
+	path := filepath.Join(os.TempDir(), "invalid_config.json")
+	content := "{ not valid json }"
+
+	err := os.WriteFile(path, []byte(content), 0o600)
+	assert.NoError(t, err)
+	defer os.Remove(path)
+
+	cfg, err := GetConfigFile(path)
+
+	assert.Nil(t, cfg)
+	assert.Error(t, err)
+}
+
+// TestGetConfigFileValidJSON проверяет GetConfigFile для корректного JSON с заполненными полями.
+func TestGetConfigFileValidJSON(t *testing.T) {
+	path := filepath.Join(os.TempDir(), "valid_config.json")
+	cfgInput := Config{
+		ServerAddress: "host-from-file:9000",
+		BaseURL:       "http://file-host:9000",
+		Logging:       false,
+		LogLevel:      "Warn",
+		FileDB:        "/tmp/file-db.json",
+		SecretKey:     "Key_From_File",
+		TokenExp:      12 * time.Hour,
+	}
+
+	data, err := json.Marshal(cfgInput)
+	assert.NoError(t, err)
+
+	err = os.WriteFile(path, data, 0o600)
+	assert.NoError(t, err)
+	defer os.Remove(path)
+
+	cfg, err := GetConfigFile(path)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, cfg)
+	assert.Equal(t, cfgInput.ServerAddress, cfg.ServerAddress)
+	assert.Equal(t, cfgInput.BaseURL, cfg.BaseURL)
+	assert.Equal(t, cfgInput.Logging, cfg.Logging)
+	assert.Equal(t, cfgInput.LogLevel, cfg.LogLevel)
+	assert.Equal(t, cfgInput.FileDB, cfg.FileDB)
+	assert.Equal(t, cfgInput.SecretKey, cfg.SecretKey)
+	assert.Equal(t, cfgInput.TokenExp, cfg.TokenExp)
+}
+
+// TestLoadConfigFromFile Проверяет LoadConfigFromFile в разных сценариях:
+// - когда флаги не заданы и значения из файла применяются;
+// - когда флаги заданы и значения из файла игнорируются;
+// - когда в файле некоторые поля пустые и не должны перезаписывать конфиг.
+func TestLoadConfigFromFile(t *testing.T) {
+	testTable := []struct {
+		name           string
+		fileConfig     *Config
+		expectedConfig *Config
+		fileContent    Config
+		flagA          string
+		flagB          string
+		flagL          string
+		flagF          string
+	}{
+		{
+			name:  "File values applied when no flags set",
+			flagA: "",
+			flagB: "",
+			flagL: "",
+			flagF: "",
+			fileConfig: &Config{
+				ServerAddress: "host-from-file:9000",
+				BaseURL:       "http://file-host:9000",
+				Logging:       false,
+				LogLevel:      "Warn",
+				FileDB:        "/tmp/file-db.json",
+			},
+			expectedConfig: &Config{
+				ServerAddress: "host-from-file:9000",
+				BaseURL:       "http://file-host:9000",
+				Logging:       false,
+				LogLevel:      "Warn",
+				FileDB:        "/tmp/file-db.json",
+			},
+			fileContent: Config{
+				ServerAddress: "host-from-file:9000",
+				BaseURL:       "http://file-host:9000",
+				Logging:       false,
+				LogLevel:      "Warn",
+				FileDB:        "/tmp/file-db.json",
+			},
+		},
+		{
+			name:  "File values ignored when flags set for a and b",
+			flagA: "host-from-flag:8888",
+			flagB: "http://flag-host:8888",
+			flagL: "",
+			flagF: "",
+			fileConfig: &Config{
+				ServerAddress: "host-from-file:9000",
+				BaseURL:       "http://file-host:9000",
+				Logging:       false,
+				LogLevel:      "Warn",
+				FileDB:        "/tmp/file-db.json",
+			},
+			expectedConfig: &Config{
+				ServerAddress: "host-from-flag:8888",
+				BaseURL:       "http://flag-host:8888",
+				Logging:       false,
+				LogLevel:      "Warn",
+				FileDB:        "/tmp/file-db.json",
+			},
+			fileContent: Config{
+				ServerAddress: "host-from-file:9000",
+				BaseURL:       "http://file-host:9000",
+				Logging:       false,
+				LogLevel:      "Warn",
+				FileDB:        "/tmp/file-db.json",
+			},
+		},
+		{
+			name:  "Only non-empty file fields applied",
+			flagA: "",
+			flagB: "",
+			flagL: "",
+			flagF: "",
+			fileConfig: &Config{
+				ServerAddress: "",
+				BaseURL:       "http://file-host:9000",
+				Logging:       false,
+				LogLevel:      "", // empty
+				FileDB:        "/tmp/file-db.json",
+			},
+			expectedConfig: &Config{
+				ServerAddress: "localhost:8080", // из дефолта флага, файл пустой
+				BaseURL:       "http://file-host:9000",
+				Logging:       false,
+				LogLevel:      "",
+				FileDB:        "/tmp/file-db.json",
+			},
+			fileContent: Config{
+				ServerAddress: "",
+				BaseURL:       "http://file-host:9000",
+				Logging:       false,
+				LogLevel:      "",
+				FileDB:        "/tmp/file-db.json",
+			},
+		},
+	}
+
+	for _, tt := range testTable {
+		t.Run(tt.name, func(t *testing.T) {
+			resetFlags()
+
+			// регистрируем флаги так же, как в InitConfig;
+			// это нужно только для тестов LoadConfigFromFile, где мы не вызываем InitConfig.
+			cfgFlag := &Config{}
+			flag.StringVar(&cfgFlag.ServerAddress, "a", "localhost:8080", "HTTP server address")
+			flag.StringVar(&cfgFlag.BaseURL, "b", "http://localhost:8080", "Base URL for shortened links")
+			flag.BoolVar(&cfgFlag.Logging, "l", true, "Enable or disable logging by -l=true or -l=false")
+			flag.StringVar(&cfgFlag.FileDB, "f", "/tmp/short-url-storage.json", "Set JSON file to save short URLs. To disable this feature - set empty key")
+
+			// если в тесте заданы значения флагов, устанавливаем их через flag.Set
+			if tt.flagA != "" {
+				flag.Set("a", tt.flagA)
+			}
+			if tt.flagB != "" {
+				flag.Set("b", tt.flagB)
+			}
+			if tt.flagL != "" {
+				flag.Set("l", tt.flagL)
+			}
+			if tt.flagF != "" {
+				flag.Set("f", tt.flagF)
+			}
+
+			flag.Parse() // <-- Parse после flag.Set
+
+			path := filepath.Join(os.TempDir(), "load_config_test.json")
+			data, err := json.Marshal(tt.fileContent)
+			assert.NoError(t, err)
+
+			err = os.WriteFile(path, data, 0o600)
+			assert.NoError(t, err)
+			defer os.Remove(path)
+
+			// передаём в LoadConfigFromFile структуру, связанную с флагами
+			result, err := LoadConfigFromFile(cfgFlag, path)
+			assert.NoError(t, err)
+
+			assert.Equal(t, tt.expectedConfig.ServerAddress, result.ServerAddress)
+			assert.Equal(t, tt.expectedConfig.BaseURL, result.BaseURL)
+			assert.Equal(t, tt.expectedConfig.Logging, result.Logging)
+			assert.Equal(t, tt.expectedConfig.LogLevel, result.LogLevel)
+			assert.Equal(t, tt.expectedConfig.FileDB, result.FileDB)
+		})
+	}
+}
+
+// TestOverrideFromEnvDuration Проверяет переопределение time.Duration из ENV.
+// Охватывает:
+// - корректные записи длительности ("24h", "45m", "60s");
+// - некорректные записи, которые не должны менять значение.
+func TestOverrideFromEnvDuration(t *testing.T) {
+	testTable := []struct {
+		name           string
+		initial        time.Duration
+		envValue       string
+		expected       time.Duration
+		shouldOverride bool
+	}{
+		{
+			name:           "Valid duration: 24h",
+			initial:        1 * time.Hour,
+			envValue:       "24h",
+			expected:       24 * time.Hour,
+			shouldOverride: true,
+		},
+		{
+			name:           "Valid duration: 45m",
+			initial:        1 * time.Hour,
+			envValue:       "45m",
+			expected:       45 * time.Minute,
+			shouldOverride: true,
+		},
+		{
+			name:           "Valid duration: 60s",
+			initial:        1 * time.Hour,
+			envValue:       "60s",
+			expected:       60 * time.Second,
+			shouldOverride: true,
+		},
+		{
+			name:           "Invalid duration: should not override",
+			initial:        1 * time.Hour,
+			envValue:       "not-a-duration",
+			expected:       1 * time.Hour,
+			shouldOverride: false,
+		},
+	}
+
+	for _, tt := range testTable {
+		t.Run(tt.name, func(t *testing.T) {
+			envKey := "TOKEN_EXP_TEST"
+			os.Setenv(envKey, tt.envValue)
+			defer os.Unsetenv(envKey)
+
+			var d time.Duration = tt.initial
+			OverrideFromEnv(&d, envKey)
+
+			if tt.shouldOverride {
+				assert.Equal(t, tt.expected, d, "Expected duration to be overridden")
+			} else {
+				assert.Equal(t, tt.initial, d, "Expected duration to remain unchanged")
+			}
+		})
+	}
+}
+
+// TestOverrideFromEnvBool Проверяет переопределение bool из ENV.
+// Охватывает:
+// - "true", "false", "True", "1", "0";
+// - некорректные значения, которые не должны менять bool.
+func TestOverrideFromEnvBool(t *testing.T) {
+	testTable := []struct {
+		name           string
+		initial        bool
+		envValue       string
+		expected       bool
+		shouldOverride bool
+	}{
+		{
+			name:           "bool true: true",
+			initial:        false,
+			envValue:       "true",
+			expected:       true,
+			shouldOverride: true,
+		},
+		{
+			name:           "bool false: false",
+			initial:        true,
+			envValue:       "false",
+			expected:       false,
+			shouldOverride: true,
+		},
+		{
+			name:           "bool True (capital)",
+			initial:        false,
+			envValue:       "True",
+			expected:       true,
+			shouldOverride: true,
+		},
+		{
+			name:           "bool 1 -> true",
+			initial:        false,
+			envValue:       "1",
+			expected:       true,
+			shouldOverride: true,
+		},
+		{
+			name:           "bool 0 -> false",
+			initial:        true,
+			envValue:       "0",
+			expected:       false,
+			shouldOverride: true,
+		},
+		{
+			name:           "Invalid bool: should not override",
+			initial:        false,
+			envValue:       "yes",
+			expected:       false,
+			shouldOverride: false,
+		},
+	}
+
+	for _, tt := range testTable {
+		t.Run(tt.name, func(t *testing.T) {
+			envKey := "LOGGING_TEST"
+			os.Setenv(envKey, tt.envValue)
+			defer os.Unsetenv(envKey)
+
+			var b bool = tt.initial
+			OverrideFromEnv(&b, envKey)
+
+			if tt.shouldOverride {
+				assert.Equal(t, tt.expected, b, "Expected bool to be overridden")
+			} else {
+				assert.Equal(t, tt.initial, b, "Expected bool to remain unchanged")
+			}
+		})
+	}
+}
+
+// TestPriorityFileVsEnv Проверяет приоритет: ENV > файл.
+// Сценарий:
+// - флаг не задан;
+// - файл устанавливает ServerAddress = "from-file";
+// - ENV устанавливает ServerAddress = "from-env";
+// Ожидаемо: ENV побеждает.
+func TestPriorityFileVsEnv(t *testing.T) {
+	envKey := "SERVER_ADDRESS"
+	envValue := "from-env:1111"
+	os.Setenv(envKey, envValue)
+	defer os.Unsetenv(envKey)
+
+	path := filepath.Join(os.TempDir(), "priority_test.json")
+	fileCfg := Config{
+		ServerAddress: "from-file:2222",
+		BaseURL:       "http://file:2222",
+	}
+	data, err := json.Marshal(fileCfg)
+	assert.NoError(t, err)
+
+	err = os.WriteFile(path, data, 0o600)
+	assert.NoError(t, err)
+	defer os.Remove(path)
+
+	// Явно выполняем цепочку: базовый конфиг → load из файла → override из ENV.
+	base := &Config{}
+	base, err = LoadConfigFromFile(base, path)
+	assert.NoError(t, err)
+
+	OverrideFromEnv(&base.ServerAddress, envKey)
+
+	assert.Equal(t, "from-env:1111", base.ServerAddress, "ENV should override file value")
+}
+
+// TestPriorityFlagVsFile Проверяет приоритет: флаг > файл.
+// Сценарий:
+// - флаг -a задан как "from-flag:3333";
+// - файл устанавливает ServerAddress = "from-file:2222";
+// Ожидаемо: флаг побеждает, значение из файла игнорируется.
+func TestPriorityFlagVsFile(t *testing.T) {
+	resetFlags()
+
+	// Регистрируем флаги так же, как в InitConfig.
+	// Это нужно только для тестов, где мы не вызываем InitConfig.
+	cfgFlag := &Config{}
+	flag.StringVar(&cfgFlag.ServerAddress, "a", "localhost:8080", "HTTP server address")
+	flag.Set("a", "from-flag:3333")
+
+	flag.Parse()
+
+	path := filepath.Join(os.TempDir(), "priority_flag_file.json")
+	fileCfg := Config{
+		ServerAddress: "from-file:2222",
+		BaseURL:       "http://file:2222",
+	}
+	data, err := json.Marshal(fileCfg)
+	assert.NoError(t, err)
+
+	err = os.WriteFile(path, data, 0o600)
+	assert.NoError(t, err)
+	defer os.Remove(path)
+
+	data, err = os.ReadFile(path)
+
+	cfgFlag, err = LoadConfigFromFile(cfgFlag, path)
+	assert.NoError(t, err)
+
+	// после загрузки из файла ServerAddress должен остаться из флага
+	assert.Equal(t, "from-flag:3333", cfgFlag.ServerAddress, "Flag should override file value")
 }
