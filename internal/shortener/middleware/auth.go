@@ -72,14 +72,14 @@ func GetUserID(tokenString string, secretKey string) (string, error) {
 
 // SetUserIDToContext Извлечение userID из JWT-токена и добавление его в контекст запроса.
 // В случае ошибки устанавливает статус Unauthorized.
-func SetUserIDToContext(jwtToken string, secretKey string, w http.ResponseWriter, r *http.Request) (http.ResponseWriter, *http.Request) {
+func SetUserIDToContext(jwtToken string, secretKey string, w http.ResponseWriter, r *http.Request) (http.ResponseWriter, *http.Request, bool) {
 	userID, err := GetUserID(jwtToken, secretKey)
 	if err != nil || userID == "" {
 		w.WriteHeader(http.StatusUnauthorized)
-		return w, r
+		return w, r, false
 	}
 	r = r.WithContext(context.WithValue(r.Context(), contextkeys.UserID, userID))
-	return w, r
+	return w, r, true
 }
 
 // AuthMiddleware Фабрика AuthMiddleware.
@@ -88,13 +88,16 @@ func SetUserIDToContext(jwtToken string, secretKey string, w http.ResponseWriter
 func AuthMiddleware(secretKey string, tokenExp time.Duration) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// ищем куку с именем "JWT" в запросе для получения токена пользователя
+			// Ищем куку с именем "JWT" в запросе
 			cookieToken, err := r.Cookie("JWT")
-			// если кука отсутствует — создаём новый токен и устанавливаем куку
-			if err != nil && errors.Is(err, http.ErrNoCookie) {
+			var jwtToken string
+
+			switch {
+			// Если кука отсутствует — создаём новый токен
+			case errors.Is(err, http.ErrNoCookie):
 				logger.Log.Debug("Cookie отсутствует", zap.Error(err))
 				// создаем JWT-токен и прописываем его в куку
-				jwtToken, err := BuildJWTToken(secretKey, tokenExp)
+				jwtToken, err = BuildJWTToken(secretKey, tokenExp)
 				if err != nil {
 					logger.Log.Debug("Невозможно сгенерировать токен", zap.Error(err))
 					http.Error(w, fmt.Sprintf("Невозможно сгенерировать токен: %v", err), http.StatusInternalServerError)
@@ -110,14 +113,20 @@ func AuthMiddleware(secretKey string, tokenExp time.Duration) func(http.Handler)
 
 				// устанавливаем куку
 				http.SetCookie(w, cookie)
+			// Ошибка при получении cookie.
+			case err != nil:
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			// JWT уже есть — берём токен из cookie.
+			default:
+				jwtToken = cookieToken.Value
+			}
 
-				// получаем UserID и добавляем его в контекст запроса
-				w, r = SetUserIDToContext(jwtToken, secretKey, w, r)
-
-				// если кука с именем "JWT" есть в запросе, то получаем из нее токен,
-				// с помощью которого получаем UserID и добавляем его в контекст запроса
-			} else {
-				w, r = SetUserIDToContext(cookieToken.Value, secretKey, w, r)
+			// Получаем UserID и добавляем его в контекст запроса.
+			w, r, ok := SetUserIDToContext(jwtToken, secretKey, w, r)
+			if !ok {
+				// SetUserIDToContext уже отправил 401.
+				return
 			}
 
 			next.ServeHTTP(w, r)

@@ -21,6 +21,7 @@ type Config struct {
 	TokenExp      time.Duration `json:"token_exp"`
 	EnableHTTPS   bool          `json:"enable_https"`
 	ConfigFile    string        `json:"-"`
+	TrustedSubnet string        `json:"trusted_subnet"`
 }
 
 // ServerConfig Указатель на структуру, получаемую после инициализации структуры в InitConfig()
@@ -43,7 +44,7 @@ func InitConfig() *Config {
 	flag.DurationVar(&config.TokenExp, "e", 24*time.Hour, "JWT token expiration time. Example: 24h, 45m, 60s, etc")
 	flag.BoolVar(&config.EnableHTTPS, "s", false, "Enable or disable HTTPS by -s=true or -s=false. Default: false")
 	flag.StringVar(&config.ConfigFile, "c", "", "Set JSON file to load system configuration. Default: file not set")
-
+	flag.StringVar(&config.TrustedSubnet, "t", "", "trusted subnet in CIDR notation. Example: 127.0.0.0/8. Default: 127.0.0.1/8")
 	flag.Parse()
 
 	// переопределяем имя файла конфигурации из ENV (приоритет выше флага)
@@ -70,6 +71,7 @@ func InitConfig() *Config {
 	OverrideFromEnv(&config.SecretKey, "SECRET_KEY")
 	OverrideFromEnv(&config.TokenExp, "TOKEN_EXP")
 	OverrideFromEnv(&config.EnableHTTPS, "ENABLE_HTTPS")
+	OverrideFromEnv(&config.TrustedSubnet, "TRUSTED_SUBNET")
 
 	ServerConfig = config
 
@@ -143,6 +145,10 @@ func LoadConfigFromFile(config *Config, path string) (*Config, error) {
 		config.EnableHTTPS = fileConfig.EnableHTTPS
 	}
 
+	if !usedFlags["t"] && fileConfig.TrustedSubnet != "" {
+		config.TrustedSubnet = fileConfig.TrustedSubnet
+	}
+
 	return config, nil
 }
 
@@ -185,6 +191,7 @@ func GetServerConfig() *Config {
 			SecretKey:     "Change_Me_On_Production",
 			TokenExp:      24 * time.Hour,
 			EnableHTTPS:   false,
+			TrustedSubnet: "127.0.0.1/8",
 		}
 		return defaultConfig
 	}

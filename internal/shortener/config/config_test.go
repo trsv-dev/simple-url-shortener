@@ -58,9 +58,10 @@ func TestGetServerConfig(t *testing.T) {
 			expectedServerConfig: &Config{ServerAddress: "localhost:8080",
 				BaseURL: "http://localhost:8080",
 				Logging: true, LogLevel: "Info",
-				FileDB:    "/tmp/short-url-storage.json",
-				SecretKey: "Change_Me_On_Production",
-				TokenExp:  86400000000000,
+				FileDB:        "/tmp/short-url-storage.json",
+				SecretKey:     "Change_Me_On_Production",
+				TokenExp:      86400000000000,
+				TrustedSubnet: "127.0.0.1/8",
 			},
 		},
 	}
@@ -461,7 +462,7 @@ func TestOverrideFromEnvDuration(t *testing.T) {
 			os.Setenv(envKey, tt.envValue)
 			defer os.Unsetenv(envKey)
 
-			var d time.Duration = tt.initial
+			d := tt.initial
 			OverrideFromEnv(&d, envKey)
 
 			if tt.shouldOverride {
@@ -535,7 +536,7 @@ func TestOverrideFromEnvBool(t *testing.T) {
 			os.Setenv(envKey, tt.envValue)
 			defer os.Unsetenv(envKey)
 
-			var b bool = tt.initial
+			b := tt.initial
 			OverrideFromEnv(&b, envKey)
 
 			if tt.shouldOverride {
@@ -609,7 +610,7 @@ func TestPriorityFlagVsFile(t *testing.T) {
 	assert.NoError(t, err)
 	defer os.Remove(path)
 
-	data, err = os.ReadFile(path)
+	//data, err = os.ReadFile(path)
 
 	cfgFlag, err = LoadConfigFromFile(cfgFlag, path)
 	assert.NoError(t, err)

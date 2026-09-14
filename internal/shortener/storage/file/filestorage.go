@@ -348,6 +348,61 @@ func (fs *FileStorage) GetUserURLs(ctx context.Context) ([]models.BatchItem, err
 	return batch, nil
 }
 
+// GetURLsStat Возвращает общее количество ссылок, хранящееся в файловой БД.
+func (fs *FileStorage) GetURLsStat(ctx context.Context) (int, error) {
+
+	// получаем UserID через контекст и приводим его к string
+	ctxUserID, ok := ctx.Value(contextkeys.UserID).(string)
+	if !ok || ctxUserID == "" {
+		return -1, fmt.Errorf("ID пользователя не найдено в контексте запроса")
+	}
+
+	var numURLs int
+
+	// берем блокировку на чтение (RLock) для защиты доступа к fs.Item
+	fs.mu.RLock()
+	defer fs.mu.RUnlock()
+
+	// Перебираем все элементы в хранилище (ключи игнорируем, значения используем) Item
+	for _, item := range fs.Item {
+		// фильтруем: только URL-ы не помеченные как удаленные
+		if !item.IsDeleted {
+			numURLs++
+		}
+	}
+
+	// возвращаем количество ссылок, хранящееся в in-memory хранилище.
+	return numURLs, nil
+}
+
+// GetUsersStat Возвращает общее количество пользователей, ссылки которых хранятся в файловой БД.
+func (fs *FileStorage) GetUsersStat(ctx context.Context) (int, error) {
+
+	// получаем UserID через контекст и приводим его к string
+	ctxUserID, ok := ctx.Value(contextkeys.UserID).(string)
+	if !ok || ctxUserID == "" {
+		return -1, fmt.Errorf("ID пользователя не найдено в контексте запроса")
+	}
+
+	var users = make(map[string]int)
+
+	// берем блокировку на чтение (RLock) для защиты доступа к fs.Item
+	fs.mu.RLock()
+	defer fs.mu.RUnlock()
+
+	// Перебираем все элементы в хранилище, не помеченные как удаленные (ключи игнорируем, значения используем) Item
+	for _, item := range fs.Item {
+		if !item.IsDeleted {
+			if users[item.UserID] == 0 {
+				users[item.UserID]++
+			}
+		}
+	}
+
+	// возвращаем количество пользователей in-memory хранилища.
+	return len(users), nil
+}
+
 // MarkAsDelete Пометка записи в файловой БД как удаленной.
 func (fs *FileStorage) MarkAsDelete(ctx context.Context, urls []string) error {
 	fs.mu.Lock()

@@ -195,7 +195,7 @@ func (ms *MemoryStorage) GetFromStorage(ctx context.Context, shortURL string) (s
 	return "", fmt.Errorf("`%v` не найден в базе данных", shortURL)
 }
 
-// GetUserURLs возвращает список всех URL-ов, ранее добавленных пользователем в in-memory хранилище.
+// GetUserURLs Возвращает список всех URL-ов, ранее добавленных пользователем в in-memory хранилище.
 func (ms *MemoryStorage) GetUserURLs(ctx context.Context) ([]models.BatchItem, error) {
 	baseURL := config.GetServerConfig().BaseURL
 
@@ -208,7 +208,7 @@ func (ms *MemoryStorage) GetUserURLs(ctx context.Context) ([]models.BatchItem, e
 	// инициализируем слайс batch для вывода результата
 	var batch []models.BatchItem
 
-	// берем блокировку на чтение (RLock) для защиты доступа к fs.Item
+	// берем блокировку на чтение (RLock) для защиты доступа к ms.Item
 	ms.mu.RLock()
 	defer ms.mu.RUnlock()
 
@@ -226,6 +226,61 @@ func (ms *MemoryStorage) GetUserURLs(ctx context.Context) ([]models.BatchItem, e
 
 	// возвращаем сформированный список URL (т.е. batch)
 	return batch, nil
+}
+
+// GetURLsStat Возвращает общее количество ссылок, хранящееся в in-memory хранилище.
+func (ms *MemoryStorage) GetURLsStat(ctx context.Context) (int, error) {
+
+	// получаем UserID через контекст и приводим его к string
+	ctxUserID, ok := ctx.Value(contextkeys.UserID).(string)
+	if !ok || ctxUserID == "" {
+		return -1, fmt.Errorf("ID пользователя не найдено в контексте запроса")
+	}
+
+	var numURLs int
+
+	// берем блокировку на чтение (RLock) для защиты доступа к ms.Item
+	ms.mu.RLock()
+	defer ms.mu.RUnlock()
+
+	// Перебираем все элементы в хранилище (ключи игнорируем, значения используем) Item
+	for _, item := range ms.Item {
+		// фильтруем: только URL-ы не помеченные как удаленные
+		if !item.IsDeleted {
+			numURLs++
+		}
+	}
+
+	// возвращаем количество ссылок, хранящееся в in-memory хранилище.
+	return numURLs, nil
+}
+
+// GetUsersStat Возвращает общее количество пользователей, ссылки которых хранятся в in-memory хранилище.
+func (ms *MemoryStorage) GetUsersStat(ctx context.Context) (int, error) {
+
+	// получаем UserID через контекст и приводим его к string
+	ctxUserID, ok := ctx.Value(contextkeys.UserID).(string)
+	if !ok || ctxUserID == "" {
+		return -1, fmt.Errorf("ID пользователя не найдено в контексте запроса")
+	}
+
+	var users = make(map[string]int)
+
+	// берем блокировку на чтение (RLock) для защиты доступа к ms.Item
+	ms.mu.RLock()
+	defer ms.mu.RUnlock()
+
+	// Перебираем все элементы в хранилище, не помеченные как удаленные (ключи игнорируем, значения используем) Item
+	for _, item := range ms.Item {
+		if !item.IsDeleted {
+			if users[item.UserID] == 0 {
+				users[item.UserID]++
+			}
+		}
+	}
+
+	// возвращаем количество пользователей in-memory хранилища.
+	return len(users), nil
 }
 
 // MarkAsDelete Абстрактный метод для удовлетворения интерфейсу Storage.

@@ -97,6 +97,10 @@ DATABASE_DSN=
 SECRET_KEY=SuperSecretKey
 # Время жизни JWT-токена. Можно указывать в формате TOKEN_EXP=24h, TOKEN_EXP=30m, TOKEN_EXP=3600s
 TOKEN_EXP=24h
+# JSON-файл с параметрами конфигурации
+CONFIG=
+# Доверенная подсеть (CIDR)
+TRUSTED_SUBNET=127.0.0.0/8
 ```
 
 ### 5. Запустите приложение
@@ -115,11 +119,11 @@ go run cmd/shortener/main.go
 
 ```bash
 # Запуск с БД
-./shortener -l=true -ll Debug -e 12h -k UIfuBer431qY1 -d 'host=localhost port=5432 user=username password=user_password dbname=user_dbname sslmode=disable'
+./shortener -l=true -ll Debug -e 12h -k UIfuBer431qY1 -d 'host=localhost port=5432 user=username password=user_password dbname=user_dbname sslmode=disable' -t 192.168.1.0/24
 # Запуск с файловым хранилищем
-./shortener -l=true -ll Debug -e 12h -k UIfuBer431qY1 -f "/tmp/short-url-storage-filedb.json"
+./shortener -l=true -ll Debug -e 12h -k UIfuBer431qY1 -f "/tmp/short-url-storage-filedb.json" -t 192.168.1.0/24
 # Запуск с хранилищем в памяти
-./shortener -l=true -ll Debug -e 12h -k UIfuBer431qY1 -f ""
+./shortener -l=true -ll Debug -e 12h -k UIfuBer431qY1 -f "" -t 192.168.1.0/24
 ```
 
 Описание флагов:
@@ -133,6 +137,8 @@ go run cmd/shortener/main.go
 -k  Секретный ключ для подписи JWT-токена. Пример: UIfuBer431qY1crEUgzIem9 (по умолчанию "Change_Me_On_Production")
 -l  Включение логгирования (по умолчанию true)
 -ll Выбор уровня логгирования (по умолчанию Info, возможные варианты - Debug, Info, Warn, Error, DPanic, Panic, Fatal)
+-f JSON-файл с параметрами конфигурации
+-t Доверенная подсеть (CIDR)
 ```
 
 ---
@@ -146,6 +152,7 @@ go run cmd/shortener/main.go
 | POST   | `/api/shorten/batch` | Пакетная загрузка URL             |
 | GET    | `/{shortID}`         | Восстановление оригинального URL |
 | GET    | `/api/user/urls`     | Получение всех URL пользователя   |
+| GET    | `/api/internal/stats`| Количество пользователей и сокращённых URL в сервисе |
 | DELETE | `/api/user/urls`     | Удаление URL (асинхронно)         |
 | GET    | `/ping`              | Проверка доступности хранилища    |
 
@@ -276,6 +283,31 @@ Content-Type: application/json
     "short_url": "http://localhost:8080/abc123",
     "original_url": "https://example.com"
   }
+]
+```
+
+- `405 Method Not Allowed` — если метод не GET
+- `403 Forbidden` — неправильный IP пользователя, список доверенных подсетей пуст или ip пользователя не входит в доверенную подсеть
+- `200 OK` — список получен
+- `401 Unauthorized` — пользователь неавторизован
+
+---
+
+## 👤 Статистика по кол-ву пользователей и ссылок (доверенная подсеть)
+
+**GET** `/api/internal/stats`  
+Количество пользователей и сокращённых URL в сервисе.
+
+### 📥 Возможные ответы:
+```text
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+[
+    {
+      "urls": <int>, // количество сокращённых URL в сервисе
+      "users": <int> // количество пользователей в сервисе
+    } 
 ]
 ```
 
