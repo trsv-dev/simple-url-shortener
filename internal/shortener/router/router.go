@@ -40,5 +40,8 @@ func Router(h *handlers.AppHandler) *chi.Mux {
 	// Обработка DELETE-запроса для асинхронного удаления списка сокращенных URL, переданных пользователем.
 	router.Delete("/api/user/urls", h.Delete)
 
+	// Обработка GET-запроса для получения статистики по количеству пользователей сервера и количеству сохраненных URL.
+	router.Get("/api/internal/stats", h.Stats)
+
 	return router
 }

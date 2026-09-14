@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -233,7 +234,7 @@ func (h *AppHandler) Batch(w http.ResponseWriter, r *http.Request) {
 
 	data, err := json.Marshal(&batch)
 	if err != nil {
-		http.Error(w, "ошибка получения структуры ответа", http.StatusInternalServerError)
+		http.Error(w, "Ошибка получения структуры ответа", http.StatusInternalServerError)
 		return
 	}
 
@@ -242,7 +243,7 @@ func (h *AppHandler) Batch(w http.ResponseWriter, r *http.Request) {
 	w.Write(data)
 }
 
-// UserURLs Функция обработки GET-запроса к /api/user/urls на получение всех сокращенных пользователем URL
+// UserURLs Функция обработки GET-запроса к /api/user/urls на получение всех сокращенных пользователем URL.
 func (h *AppHandler) UserURLs(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -257,12 +258,14 @@ func (h *AppHandler) UserURLs(w http.ResponseWriter, r *http.Request) {
 
 	data, err := json.Marshal(urls)
 	if err != nil {
-		logger.Log.Debug("ошибка маршаллинга URL-ов пользователя", zap.String("rows error", err.Error()))
+		logger.Log.Debug("Ошибка маршалинга URL-ов пользователя", zap.String("rows error", err.Error()))
 		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 
 	if len(urls) == 0 {
 		w.WriteHeader(http.StatusNoContent)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -297,10 +300,79 @@ func (h *AppHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	err = h.storage.MarkAsDelete(r.Context(), URLs)
 
 	if err != nil {
-		logger.Log.Info("ошибка при удалении URL", zap.String("delete url error", err.Error()))
+		logger.Log.Info("Ошибка при удалении URL", zap.String("delete url error", err.Error()))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	w.WriteHeader(http.StatusAccepted)
+}
+
+// Stats Функция обработки GET-запроса к /api/internal/stats для получения статистики
+// (общее кол-во пользователей и общее кол-во сохраненных ссылок).
+// Доступ только из доверенной подсети, задающейся через переменную окружения TRUSTED_SUBNET или флаг -t,
+// например, 127.0.0.0/8 или -t 192.168.1.0/24.
+// При пустом значении доступ запрещён для любого входящего запроса.
+func (h *AppHandler) Stats(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	// из конфига сервера получаем доверенные маски подсети
+	trustedSubnet := config.GetServerConfig().TrustedSubnet
+	if trustedSubnet == "" {
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+
+	// получаем X-Real-IP из заголовка запроса
+	ipStr := r.Header.Get("X-Real-IP")
+
+	// парсим его
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+
+	// парсим доверенные маски
+	_, subnet, err := net.ParseCIDR(trustedSubnet)
+	if err != nil {
+		logger.Log.Error("Некорректная доверенная подсеть", zap.String("subnet", trustedSubnet), zap.Error(err))
+		http.Error(w, "Ошибка конфигурации", http.StatusInternalServerError)
+		return
+	}
+
+	// проверяем, входит ли ip в доверенную подсеть
+	if !subnet.Contains(ip) {
+		logger.Log.Debug("Попытка доступа к статистике с недопустимого адреса", zap.String("remote address", ip.String()))
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+
+	urlsStat, err := h.storage.GetURLsStat(r.Context())
+	if err != nil {
+		http.Error(w, "Ошибка получения статистики по URL-ам", http.StatusInternalServerError)
+		return
+	}
+
+	usersStat, err := h.storage.GetUsersStat(r.Context())
+	if err != nil {
+		http.Error(w, "Ошибка получения статистики по пользователям", http.StatusInternalServerError)
+		return
+	}
+
+	stat := models.Stats{URLs: urlsStat, Users: usersStat}
+
+	data, err := json.Marshal(&stat)
+	if err != nil {
+		logger.Log.Debug("Ошибка маршалинга статистики", zap.String("rows error", err.Error()))
+		http.Error(w, "Ошибка маршалинга статистики", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(data)
 }

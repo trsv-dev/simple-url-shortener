@@ -301,6 +301,52 @@ func (pg *PgStorage) GetUserURLs(ctx context.Context) ([]models.BatchItem, error
 	return urls, nil
 }
 
+// GetURLsStat Временная заглушка для удовлетворения интерфейсу Storage.
+func (pg *PgStorage) GetURLsStat(ctx context.Context) (int, error) {
+
+	// получаем UserID через контекст и приводим его к string
+	ctxUserID, ok := ctx.Value(contextkeys.UserID).(string)
+	if !ok || ctxUserID == "" {
+		return -1, fmt.Errorf("ID пользователя не найдено в контексте запроса")
+	}
+
+	var urls int
+
+	query := `SELECT COUNT(id)
+			  FROM urls
+			  WHERE is_deleted IS FALSE`
+
+	err := pg.DB.QueryRowContext(ctx, query).Scan(&urls)
+	if err != nil {
+		return 0, err
+	}
+
+	return urls, nil
+}
+
+// GetUsersStat Временная заглушка для удовлетворения интерфейсу Storage.
+func (pg *PgStorage) GetUsersStat(ctx context.Context) (int, error) {
+
+	// получаем UserID через контекст и приводим его к string
+	ctxUserID, ok := ctx.Value(contextkeys.UserID).(string)
+	if !ok || ctxUserID == "" {
+		return -1, fmt.Errorf("ID пользователя не найдено в контексте запроса")
+	}
+
+	var users int
+
+	query := `SELECT COUNT(DISTINCT (user_id)) 
+			  FROM urls 
+			  WHERE is_deleted IS FALSE`
+
+	err := pg.DB.QueryRowContext(ctx, query).Scan(&users)
+	if err != nil {
+		return 0, err
+	}
+
+	return users, nil
+}
+
 // MarkAsDelete Помечает указанные shortURL как удалённые для пользователя из контекста.
 func (pg *PgStorage) MarkAsDelete(ctx context.Context, URLs []string) error {
 	// извлекаем userID из контекста

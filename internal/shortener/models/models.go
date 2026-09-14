@@ -25,3 +25,9 @@ type Item struct {
 	UserID    string `json:"user_id"`
 	IsDeleted bool   `json:"is_deleted"`
 }
+
+// Stats Модель для отображения статистики по URL-ам и пользователям сервера.
+type Stats struct {
+	URLs  int `json:"urls"`
+	Users int `json:"users"`
+}
