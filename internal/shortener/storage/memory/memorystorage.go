@@ -283,7 +283,7 @@ func (ms *MemoryStorage) GetUsersStat(ctx context.Context) (int, error) {
 	return len(users), nil
 }
 
-// MarkAsDelete Абстрактный метод для удовлетворения интерфейсу Storage.
+// MarkAsDelete Пометка записи в in-memory хранилище как удаленной.
 func (ms *MemoryStorage) MarkAsDelete(ctx context.Context, urls []string) error {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()

@@ -11,6 +11,7 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/config"
+	grpcserver "github.com/trsv-dev/simple-url-shortener/internal/shortener/grpc/server"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/handlers"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/logger"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/server"
@@ -97,6 +98,7 @@ func main() {
 	)
 
 	appHandler := handlers.NewAppHandler(URLStorage, cfg.SecretKey, cfg.TokenExp)
+	//grpcHandler := grpc_handlers.NewGRPCServer(URLStorage)
 
 	// запускаем горутину, которая через временные промежутки делает удаление помеченных (is_delete=True) URL
 	go func() {
@@ -115,6 +117,12 @@ func main() {
 				logger.Log.Info("Горутина для фонового удаления URL завершена")
 				return
 			}
+		}
+	}()
+
+	go func() {
+		if err := grpcserver.RunGRPCServer(ctx, URLStorage); err != nil {
+			logger.Log.Error("Ошибка gRPC сервера", zap.Error(err))
 		}
 	}()
 

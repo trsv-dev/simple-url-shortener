@@ -301,7 +301,7 @@ func (pg *PgStorage) GetUserURLs(ctx context.Context) ([]models.BatchItem, error
 	return urls, nil
 }
 
-// GetURLsStat Временная заглушка для удовлетворения интерфейсу Storage.
+// GetURLsStat Возвращает общее количество ссылок, хранящееся в БД.
 func (pg *PgStorage) GetURLsStat(ctx context.Context) (int, error) {
 
 	// получаем UserID через контекст и приводим его к string
@@ -324,7 +324,7 @@ func (pg *PgStorage) GetURLsStat(ctx context.Context) (int, error) {
 	return urls, nil
 }
 
-// GetUsersStat Временная заглушка для удовлетворения интерфейсу Storage.
+// GetUsersStat Возвращает общее количество пользователей, ссылки которых хранятся в БД.
 func (pg *PgStorage) GetUsersStat(ctx context.Context) (int, error) {
 
 	// получаем UserID через контекст и приводим его к string
