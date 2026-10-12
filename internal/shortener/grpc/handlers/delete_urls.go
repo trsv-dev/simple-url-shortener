@@ -12,7 +12,7 @@ import (
 )
 
 // DeleteURLs Функция обработки gRPC запроса (DELETE) к /api/user/urls, которая в теле запроса.
-func (s *GRPCServer) DeleteURLs(ctx context.Context, in *pb.DeleteURLsRequest) (*emptypb.Empty, error) {
+func (s *GRPCHandler) DeleteURLs(ctx context.Context, in *pb.DeleteURLsRequest) (*emptypb.Empty, error) {
 	err := s.Storage.MarkAsDelete(ctx, in.ShortUrls)
 
 	if err != nil {

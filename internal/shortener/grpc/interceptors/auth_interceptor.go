@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/auth"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/contextkeys"
-	"github.com/trsv-dev/simple-url-shortener/internal/shortener/middleware"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -24,7 +24,7 @@ func AuthInterceptor(secretKey string) grpc.UnaryServerInterceptor {
 		if !ok {
 			return nil, status.Error(
 				codes.Unauthenticated,
-				"missing authentication metadata",
+				"отсутствуют метаданные аутентификации",
 			)
 		}
 
@@ -41,7 +41,7 @@ func AuthInterceptor(secretKey string) grpc.UnaryServerInterceptor {
 		}
 
 		// используем существующую проверку JWT.
-		userID, err := middleware.GetUserID(parts[1], secretKey)
+		userID, err := auth.GetUserID(parts[1], secretKey)
 		if err != nil || userID == "" {
 			return nil, status.Error(codes.Unauthenticated, "невалидный токен")
 		}

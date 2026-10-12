@@ -11,6 +11,7 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/config"
+	grpc_handlers "github.com/trsv-dev/simple-url-shortener/internal/shortener/grpc/handlers"
 	grpcserver "github.com/trsv-dev/simple-url-shortener/internal/shortener/grpc/server"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/handlers"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/logger"
@@ -98,7 +99,7 @@ func main() {
 	)
 
 	appHandler := handlers.NewAppHandler(URLStorage, cfg.SecretKey, cfg.TokenExp)
-	//grpcHandler := grpc_handlers.NewGRPCServer(URLStorage)
+	grpcHandler := grpc_handlers.NewGRPCHandler(URLStorage, cfg.SecretKey, cfg.ServerAddress, cfg.GRPCPort)
 
 	// запускаем горутину, которая через временные промежутки делает удаление помеченных (is_delete=True) URL
 	go func() {
@@ -120,11 +121,13 @@ func main() {
 		}
 	}()
 
-	go func() {
-		if err := grpcserver.RunGRPCServer(ctx, URLStorage); err != nil {
-			logger.Log.Error("Ошибка gRPC сервера", zap.Error(err))
-		}
-	}()
+	if cfg.EnableGRPC {
+		go func() {
+			if err := grpcserver.RunGRPCServer(ctx, grpcHandler); err != nil {
+				logger.Log.Error("Ошибка gRPC сервера", zap.Error(err))
+			}
+		}()
+	}
 
 	err := server.RunServer(ctx, cfg.ServerAddress, cfg.EnableHTTPS, appHandler)
 	if err != nil {

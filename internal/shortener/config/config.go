@@ -22,6 +22,8 @@ type Config struct {
 	EnableHTTPS   bool          `json:"enable_https"`
 	ConfigFile    string        `json:"-"`
 	TrustedSubnet string        `json:"trusted_subnet"`
+	EnableGRPC    bool          `json:"enable_grpc"`
+	GRPCPort      string        `json:"grpc_port"`
 }
 
 // ServerConfig Указатель на структуру, получаемую после инициализации структуры в InitConfig()
@@ -45,6 +47,8 @@ func InitConfig() *Config {
 	flag.BoolVar(&config.EnableHTTPS, "s", false, "Enable or disable HTTPS by -s=true or -s=false. Default: false")
 	flag.StringVar(&config.ConfigFile, "c", "", "Set JSON file to load system configuration. Default: file not set")
 	flag.StringVar(&config.TrustedSubnet, "t", "", "trusted subnet in CIDR notation. Example: 127.0.0.0/8. Default: 127.0.0.1/8")
+	flag.BoolVar(&config.EnableGRPC, "g", false, "Enable or disable running the gRPC server. Default: false")
+	flag.StringVar(&config.GRPCPort, "gp", "9090", "Port for the gRPC server. Default: 9090")
 	flag.Parse()
 
 	// переопределяем имя файла конфигурации из ENV (приоритет выше флага)
@@ -72,6 +76,8 @@ func InitConfig() *Config {
 	OverrideFromEnv(&config.TokenExp, "TOKEN_EXP")
 	OverrideFromEnv(&config.EnableHTTPS, "ENABLE_HTTPS")
 	OverrideFromEnv(&config.TrustedSubnet, "TRUSTED_SUBNET")
+	OverrideFromEnv(&config.EnableGRPC, "ENABLE_GRPC")
+	OverrideFromEnv(&config.GRPCPort, "GRPC_PORT")
 
 	ServerConfig = config
 
@@ -149,6 +155,14 @@ func LoadConfigFromFile(config *Config, path string) (*Config, error) {
 		config.TrustedSubnet = fileConfig.TrustedSubnet
 	}
 
+	if !usedFlags["g"] && !fileConfig.EnableGRPC {
+		config.EnableGRPC = fileConfig.EnableGRPC
+	}
+
+	if !usedFlags["gp"] && fileConfig.GRPCPort != "" {
+		config.GRPCPort = fileConfig.GRPCPort
+	}
+
 	return config, nil
 }
 
@@ -192,6 +206,8 @@ func GetServerConfig() *Config {
 			TokenExp:      24 * time.Hour,
 			EnableHTTPS:   false,
 			TrustedSubnet: "127.0.0.1/8",
+			EnableGRPC:    false,
+			GRPCPort:      "9090",
 		}
 		return defaultConfig
 	}

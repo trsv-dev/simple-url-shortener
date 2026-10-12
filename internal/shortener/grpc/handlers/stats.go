@@ -20,7 +20,7 @@ import (
 // Доступ только из доверенной подсети, задающейся через переменную окружения TRUSTED_SUBNET или флаг -t,
 // например, 127.0.0.0/8 или -t 192.168.1.0/24.
 // При пустом значении доступ запрещён для любого входящего запроса.
-func (s *GRPCServer) Stats(ctx context.Context, in *emptypb.Empty) (*pb.GetStatsResponse, error) {
+func (s *GRPCHandler) Stats(ctx context.Context, in *emptypb.Empty) (*pb.GetStatsResponse, error) {
 	// из конфига сервера получаем доверенные маски подсети
 	trustedSubnet := config.GetServerConfig().TrustedSubnet
 	if trustedSubnet == "" {

@@ -12,6 +12,8 @@
 - 🔗 Сокращение длинных URL
 - 🔄 Восстановление оригинальных URL
 - 👤 Авторизация и сессии через cookie
+- 🌐 HTTP API и gRPC API
+- Независимый запуск gRPC-сервера с настройкой порта
 - 🧠 Три варианта хранения - в оперативной памяти, файле и PostgreSQL
 - 💥 Проверка сгенерированных коротких URL на коллизии
 - ⬅️ Удаление пользовательских ссылок
@@ -35,6 +37,11 @@ internal/
 │   ├── errs/              # Кастомные ошибки
 │   ├── generator/         # Генератор коротких ссылок
 │   ├── handlers/          # HTTP-обработчики
+    ├── grpc/              # gRPC сервер
+    │   ├── handlers/      # gRPC хендлеры
+    │   ├── interceptors/  # gRPC интерсепторы
+    │   ├── proto/         # protobuf-описания и сгенерированный код
+    │   └── server/        # Логика запуска gRPC сервера
 │   ├── logger/            # Инициализация логгера
 │   ├── middleware/        # Мидлвары: GZIP, авторизация
 │   ├── mocks/             # Моки для тестов
@@ -83,8 +90,11 @@ postgres=# alter database dbname owner to username;
 ```env
 # Пример .env. Вам нужно заполнить своими данными
 
+# Адрес и порт сервера
 SERVER_ADDRESS=localhost:8080
+# Базовый URL сервера
 BASE_URL=http://localhost:8080
+# Включить логирование
 LOGGING=true
 # Возможные варианты - Debug, Info, Warn, Error, DPanic, Panic, Fatal
 LOG_LEVEL=Debug
@@ -101,6 +111,10 @@ TOKEN_EXP=24h
 CONFIG=
 # Доверенная подсеть (CIDR)
 TRUSTED_SUBNET=127.0.0.0/8
+# Запуск gRPC сервера
+ENABLE_GRPC=false
+# gRPC порт
+GRPC_PORT=9999
 ```
 
 ### 5. Запустите приложение
@@ -124,6 +138,8 @@ go run cmd/shortener/main.go
 ./shortener -l=true -ll Debug -e 12h -k UIfuBer431qY1 -f "/tmp/short-url-storage-filedb.json" -t 192.168.1.0/24
 # Запуск с хранилищем в памяти
 ./shortener -l=true -ll Debug -e 12h -k UIfuBer431qY1 -f "" -t 192.168.1.0/24
+# Запуск с БД и gRPC сервером
+./shortener -l=true -ll Debug -e 12h -k UIfuBer431qY1 -d 'host=localhost port=5432 user=username password=user_password dbname=user_dbname sslmode=disable' -t 192.168.1.0/24 -g=true -gp=9999
 ```
 
 Описание флагов:
@@ -139,6 +155,8 @@ go run cmd/shortener/main.go
 -ll Выбор уровня логгирования (по умолчанию Info, возможные варианты - Debug, Info, Warn, Error, DPanic, Panic, Fatal)
 -f JSON-файл с параметрами конфигурации
 -t Доверенная подсеть (CIDR)
+-g Включение gRPC сервера (по умолчанию false)
+-gp Порт gRPC сервера (по умолчанию 9999)
 ```
 
 ---
@@ -162,6 +180,9 @@ go run cmd/shortener/main.go
 
 - 🐹 go 1.22.0+
 - 🐘 PostgreSQL
+- 🌐 HTTP API
+- 📡 gRPC API
+- 🧩 Protocol Buffers (protobuf)
 - 🍪 Cookie-based аутентификация
 - 🔐 GZIP middleware
 - 🧪 Testify, sqlmock

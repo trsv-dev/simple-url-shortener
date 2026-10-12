@@ -12,7 +12,7 @@ import (
 )
 
 // Post Функция обработки gRPC запроса (POST) к "/".
-func (s *GRPCServer) Post(ctx context.Context, in *pb.PostRequest) (*pb.PostResponse, error) {
+func (s *GRPCHandler) Post(ctx context.Context, in *pb.PostRequest) (*pb.PostResponse, error) {
 	shortURL, err := s.Storage.SetInStorage(ctx, in.OriginalUrl)
 
 	var conflictErr *errs.ErrLongURLConflict

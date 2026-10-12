@@ -18,7 +18,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// AppHandler Структура для работы с зависимостями хендлеров.
+// AppHandler Структура для работы с зависимостями HTTP хендлеров.
 type AppHandler struct {
 	storage   storage.Storage
 	SecretKey string
