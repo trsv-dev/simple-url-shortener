@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/trsv-dev/simple-url-shortener/internal/shortener/auth"
 	"github.com/trsv-dev/simple-url-shortener/internal/shortener/contextkeys"
 )
 
@@ -54,7 +55,7 @@ func TestAuthMiddleware(t *testing.T) {
 
 		handler := AuthMiddleware(secretKey, tokenExp)(mockHandler)
 
-		JWTtoken, err := BuildJWTToken(secretKey, tokenExp)
+		JWTtoken, err := auth.BuildJWTToken(secretKey, tokenExp)
 		assert.NoError(t, err)
 
 		r := httptest.NewRequest("GET", "/api/user/urls", nil)
@@ -81,7 +82,7 @@ func TestBuildJWTToken(t *testing.T) {
 		secretKey := "Secret_Key"
 		tokenExp := 10 * time.Minute
 
-		token, err := BuildJWTToken(secretKey, tokenExp)
+		token, err := auth.BuildJWTToken(secretKey, tokenExp)
 		tokenParts := strings.Split(token, ".")
 
 		assert.NoError(t, err)
@@ -95,10 +96,10 @@ func TestGetUserID(t *testing.T) {
 		secretKey := "Secret_Key"
 		tokenExp := 10 * time.Minute
 
-		token, err := BuildJWTToken(secretKey, tokenExp)
+		token, err := auth.BuildJWTToken(secretKey, tokenExp)
 		assert.NoError(t, err)
 
-		userID, err := GetUserID(token, secretKey)
+		userID, err := auth.GetUserID(token, secretKey)
 		assert.NoError(t, err)
 		assert.NotEmpty(t, userID)
 		assert.Equal(t, 36, len(userID))

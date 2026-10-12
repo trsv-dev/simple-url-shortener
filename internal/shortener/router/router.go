@@ -23,7 +23,7 @@ func Router(h *handlers.AppHandler) *chi.Mux {
 	router.Post("/", h.PostHandler)
 
 	// Обработка GET-запросов для получения оригинального URL.
-	router.Get("/{id}", h.GetHandler)
+	router.Get("/{short_url}", h.GetHandler)
 
 	// Обработка POST-запросов в формате JSON для создания короткого URL.
 	router.Post("/api/shorten", h.APIShorten)
