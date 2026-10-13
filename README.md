@@ -37,11 +37,11 @@ internal/
 │   ├── errs/              # Кастомные ошибки
 │   ├── generator/         # Генератор коротких ссылок
 │   ├── handlers/          # HTTP-обработчики
-    ├── grpc/              # gRPC сервер
-    │   ├── handlers/      # gRPC хендлеры
-    │   ├── interceptors/  # gRPC интерсепторы
-    │   ├── proto/         # protobuf-описания и сгенерированный код
-    │   └── server/        # Логика запуска gRPC сервера
+│   ├── grpc/              # gRPC сервер
+│   │   ├── handlers/      # gRPC хендлеры
+│   │   ├── interceptors/  # gRPC интерсепторы
+│   │   ├── proto/         # protobuf-описания и сгенерированный код
+│   │   └── server/        # Логика запуска gRPC сервера
 │   ├── logger/            # Инициализация логгера
 │   ├── middleware/        # Мидлвары: GZIP, авторизация
 │   ├── mocks/             # Моки для тестов
