@@ -99,7 +99,6 @@ func main() {
 	)
 
 	appHandler := handlers.NewAppHandler(URLStorage, cfg.SecretKey, cfg.TokenExp)
-	grpcHandler := grpc_handlers.NewGRPCHandler(URLStorage, cfg.SecretKey, cfg.ServerAddress, cfg.GRPCPort)
 
 	// запускаем горутину, которая через временные промежутки делает удаление помеченных (is_delete=True) URL
 	go func() {
@@ -121,12 +120,20 @@ func main() {
 		}
 	}()
 
+	// если разрешен запуск gRPC сервера - конфигурируем и запускаем его
 	if cfg.EnableGRPC {
-		go func() {
-			if err := grpcserver.RunGRPCServer(ctx, grpcHandler); err != nil {
-				logger.Log.Error("Ошибка gRPC сервера", zap.Error(err))
-			}
-		}()
+		grpcConfig := grpc_handlers.GRPCConfig{
+			ServerAddress: cfg.ServerAddress,
+			GRPCPort:      cfg.GRPCPort,
+			SecretKey:     cfg.SecretKey,
+			TokenExp:      cfg.TokenExp,
+		}
+
+		grpcHandler := grpc_handlers.NewGRPCHandler(URLStorage, grpcConfig)
+
+		if err := grpcserver.RunGRPCServer(ctx, grpcHandler); err != nil {
+			logger.Log.Error("Ошибка gRPC сервера", zap.Error(err))
+		}
 	}
 
 	err := server.RunServer(ctx, cfg.ServerAddress, cfg.EnableHTTPS, appHandler)

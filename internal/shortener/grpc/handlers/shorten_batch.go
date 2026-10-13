@@ -10,7 +10,7 @@ import (
 )
 
 // ShortenBatch Функция обработки пакетного gRPC запроса (POST) в формате JSON к /api/shorten/batch.
-func (s *GRPCHandler) ShortenBatch(ctx context.Context, in *pb.ShortenBatchRequest) (*pb.ShortenBatchResponse, error) {
+func (g *GRPCHandler) ShortenBatch(ctx context.Context, in *pb.ShortenBatchRequest) (*pb.ShortenBatchResponse, error) {
 	if len(in.Urls) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "Батчи не могут быть пустыми")
 	}
@@ -27,7 +27,7 @@ func (s *GRPCHandler) ShortenBatch(ctx context.Context, in *pb.ShortenBatchReque
 	}
 
 	// отправляем батч в хранилище, там он "дозаполняется" сокращенными URL
-	err := s.Storage.SetBatchInStorage(ctx, batch)
+	err := g.Storage.SetBatchInStorage(ctx, batch)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}

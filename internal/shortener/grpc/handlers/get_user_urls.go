@@ -10,8 +10,8 @@ import (
 )
 
 // GetUserURLs Функция обработки gRPC запроса (GET) к /api/user/urls на получение всех сокращенных пользователем URL.
-func (s *GRPCHandler) GetUserURLs(ctx context.Context, _ *emptypb.Empty) (*pb.GetUserURLsResponse, error) {
-	urls, err := s.Storage.GetUserURLs(ctx)
+func (g *GRPCHandler) GetUserURLs(ctx context.Context, _ *emptypb.Empty) (*pb.GetUserURLsResponse, error) {
+	urls, err := g.Storage.GetUserURLs(ctx)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}

@@ -11,10 +11,10 @@ import (
 )
 
 // GetOriginalURL Функция обработки gRPC запроса (GET) к "/{id}".
-func (s *GRPCHandler) GetOriginalURL(ctx context.Context, in *pb.GetOriginalURLRequest) (*pb.GetOriginalURLResponse, error) {
+func (g *GRPCHandler) GetOriginalURL(ctx context.Context, in *pb.GetOriginalURLRequest) (*pb.GetOriginalURLResponse, error) {
 	id := in.ShortUrl
 
-	value, err := s.Storage.GetFromStorage(ctx, id)
+	value, err := g.Storage.GetFromStorage(ctx, id)
 	var errURLDeleted *errs.ErrURLDeleted
 
 	if err != nil {

@@ -566,6 +566,50 @@ func (x *GetStatsResponse) GetUrlsAmount() uint32 {
 	return 0
 }
 
+type GetTokenResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetTokenResponse) Reset() {
+	*x = GetTokenResponse{}
+	mi := &file_grpc_server_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetTokenResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetTokenResponse) ProtoMessage() {}
+
+func (x *GetTokenResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_grpc_server_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetTokenResponse.ProtoReflect.Descriptor instead.
+func (*GetTokenResponse) Descriptor() ([]byte, []int) {
+	return file_grpc_server_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *GetTokenResponse) GetToken() string {
+	if x != nil {
+		return x.Token
+	}
+	return ""
+}
+
 type ShortenBatchRequest_URL struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	CorrelationId string                 `protobuf:"bytes,1,opt,name=correlation_id,json=correlationId,proto3" json:"correlation_id,omitempty"`
@@ -577,7 +621,7 @@ type ShortenBatchRequest_URL struct {
 
 func (x *ShortenBatchRequest_URL) Reset() {
 	*x = ShortenBatchRequest_URL{}
-	mi := &file_grpc_server_proto_msgTypes[12]
+	mi := &file_grpc_server_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -589,7 +633,7 @@ func (x *ShortenBatchRequest_URL) String() string {
 func (*ShortenBatchRequest_URL) ProtoMessage() {}
 
 func (x *ShortenBatchRequest_URL) ProtoReflect() protoreflect.Message {
-	mi := &file_grpc_server_proto_msgTypes[12]
+	mi := &file_grpc_server_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -637,7 +681,7 @@ type ShortenBatchResponse_URL struct {
 
 func (x *ShortenBatchResponse_URL) Reset() {
 	*x = ShortenBatchResponse_URL{}
-	mi := &file_grpc_server_proto_msgTypes[13]
+	mi := &file_grpc_server_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -649,7 +693,7 @@ func (x *ShortenBatchResponse_URL) String() string {
 func (*ShortenBatchResponse_URL) ProtoMessage() {}
 
 func (x *ShortenBatchResponse_URL) ProtoReflect() protoreflect.Message {
-	mi := &file_grpc_server_proto_msgTypes[13]
+	mi := &file_grpc_server_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -726,7 +770,9 @@ const file_grpc_server_proto_rawDesc = "" +
 	"\x10GetStatsResponse\x12!\n" +
 	"\fusers_amount\x18\x01 \x01(\rR\vusersAmount\x12\x1f\n" +
 	"\vurls_amount\x18\x02 \x01(\rR\n" +
-	"urlsAmount2\xe1\x04\n" +
+	"urlsAmount\"(\n" +
+	"\x10GetTokenResponse\x12\x14\n" +
+	"\x05token\x18\x01 \x01(\tR\x05token2\xa6\x05\n" +
 	"\x13URLShortenerService\x12=\n" +
 	"\x04Post\x12\x18.grpc_server.PostRequest\x1a\x19.grpc_server.PostResponse\"\x00\x12F\n" +
 	"\aShorten\x12\x1b.grpc_server.ShortenRequest\x1a\x1c.grpc_server.ShortenResponse\"\x00\x12U\n" +
@@ -736,7 +782,8 @@ const file_grpc_server_proto_rawDesc = "" +
 	"\n" +
 	"DeleteURLs\x12\x1e.grpc_server.DeleteURLsRequest\x1a\x16.google.protobuf.Empty\"\x00\x12@\n" +
 	"\x05Stats\x12\x16.google.protobuf.Empty\x1a\x1d.grpc_server.GetStatsResponse\"\x00\x12:\n" +
-	"\x06PingDB\x12\x16.google.protobuf.Empty\x1a\x16.google.protobuf.Empty\"\x00BCZAgithub.com/trsv-dev/simple-url-shortener/internal/shortener/protob\x06proto3"
+	"\x06PingDB\x12\x16.google.protobuf.Empty\x1a\x16.google.protobuf.Empty\"\x00\x12C\n" +
+	"\bGetToken\x12\x16.google.protobuf.Empty\x1a\x1d.grpc_server.GetTokenResponse\"\x00BCZAgithub.com/trsv-dev/simple-url-shortener/internal/shortener/protob\x06proto3"
 
 var (
 	file_grpc_server_proto_rawDescOnce sync.Once
@@ -750,7 +797,7 @@ func file_grpc_server_proto_rawDescGZIP() []byte {
 	return file_grpc_server_proto_rawDescData
 }
 
-var file_grpc_server_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_grpc_server_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_grpc_server_proto_goTypes = []any{
 	(*PostRequest)(nil),              // 0: grpc_server.PostRequest
 	(*PostResponse)(nil),             // 1: grpc_server.PostResponse
@@ -764,32 +811,35 @@ var file_grpc_server_proto_goTypes = []any{
 	(*GetUserURLsResponse)(nil),      // 9: grpc_server.GetUserURLsResponse
 	(*DeleteURLsRequest)(nil),        // 10: grpc_server.DeleteURLsRequest
 	(*GetStatsResponse)(nil),         // 11: grpc_server.GetStatsResponse
-	(*ShortenBatchRequest_URL)(nil),  // 12: grpc_server.ShortenBatchRequest.URL
-	(*ShortenBatchResponse_URL)(nil), // 13: grpc_server.ShortenBatchResponse.URL
-	(*emptypb.Empty)(nil),            // 14: google.protobuf.Empty
+	(*GetTokenResponse)(nil),         // 12: grpc_server.GetTokenResponse
+	(*ShortenBatchRequest_URL)(nil),  // 13: grpc_server.ShortenBatchRequest.URL
+	(*ShortenBatchResponse_URL)(nil), // 14: grpc_server.ShortenBatchResponse.URL
+	(*emptypb.Empty)(nil),            // 15: google.protobuf.Empty
 }
 var file_grpc_server_proto_depIdxs = []int32{
-	12, // 0: grpc_server.ShortenBatchRequest.urls:type_name -> grpc_server.ShortenBatchRequest.URL
-	13, // 1: grpc_server.ShortenBatchResponse.urls:type_name -> grpc_server.ShortenBatchResponse.URL
+	13, // 0: grpc_server.ShortenBatchRequest.urls:type_name -> grpc_server.ShortenBatchRequest.URL
+	14, // 1: grpc_server.ShortenBatchResponse.urls:type_name -> grpc_server.ShortenBatchResponse.URL
 	8,  // 2: grpc_server.GetUserURLsResponse.user_urls:type_name -> grpc_server.UserURL
 	0,  // 3: grpc_server.URLShortenerService.Post:input_type -> grpc_server.PostRequest
 	2,  // 4: grpc_server.URLShortenerService.Shorten:input_type -> grpc_server.ShortenRequest
 	4,  // 5: grpc_server.URLShortenerService.ShortenBatch:input_type -> grpc_server.ShortenBatchRequest
 	6,  // 6: grpc_server.URLShortenerService.GetOriginalURL:input_type -> grpc_server.GetOriginalURLRequest
-	14, // 7: grpc_server.URLShortenerService.GetUserURLs:input_type -> google.protobuf.Empty
+	15, // 7: grpc_server.URLShortenerService.GetUserURLs:input_type -> google.protobuf.Empty
 	10, // 8: grpc_server.URLShortenerService.DeleteURLs:input_type -> grpc_server.DeleteURLsRequest
-	14, // 9: grpc_server.URLShortenerService.Stats:input_type -> google.protobuf.Empty
-	14, // 10: grpc_server.URLShortenerService.PingDB:input_type -> google.protobuf.Empty
-	1,  // 11: grpc_server.URLShortenerService.Post:output_type -> grpc_server.PostResponse
-	3,  // 12: grpc_server.URLShortenerService.Shorten:output_type -> grpc_server.ShortenResponse
-	5,  // 13: grpc_server.URLShortenerService.ShortenBatch:output_type -> grpc_server.ShortenBatchResponse
-	7,  // 14: grpc_server.URLShortenerService.GetOriginalURL:output_type -> grpc_server.GetOriginalURLResponse
-	9,  // 15: grpc_server.URLShortenerService.GetUserURLs:output_type -> grpc_server.GetUserURLsResponse
-	14, // 16: grpc_server.URLShortenerService.DeleteURLs:output_type -> google.protobuf.Empty
-	11, // 17: grpc_server.URLShortenerService.Stats:output_type -> grpc_server.GetStatsResponse
-	14, // 18: grpc_server.URLShortenerService.PingDB:output_type -> google.protobuf.Empty
-	11, // [11:19] is the sub-list for method output_type
-	3,  // [3:11] is the sub-list for method input_type
+	15, // 9: grpc_server.URLShortenerService.Stats:input_type -> google.protobuf.Empty
+	15, // 10: grpc_server.URLShortenerService.PingDB:input_type -> google.protobuf.Empty
+	15, // 11: grpc_server.URLShortenerService.GetToken:input_type -> google.protobuf.Empty
+	1,  // 12: grpc_server.URLShortenerService.Post:output_type -> grpc_server.PostResponse
+	3,  // 13: grpc_server.URLShortenerService.Shorten:output_type -> grpc_server.ShortenResponse
+	5,  // 14: grpc_server.URLShortenerService.ShortenBatch:output_type -> grpc_server.ShortenBatchResponse
+	7,  // 15: grpc_server.URLShortenerService.GetOriginalURL:output_type -> grpc_server.GetOriginalURLResponse
+	9,  // 16: grpc_server.URLShortenerService.GetUserURLs:output_type -> grpc_server.GetUserURLsResponse
+	15, // 17: grpc_server.URLShortenerService.DeleteURLs:output_type -> google.protobuf.Empty
+	11, // 18: grpc_server.URLShortenerService.Stats:output_type -> grpc_server.GetStatsResponse
+	15, // 19: grpc_server.URLShortenerService.PingDB:output_type -> google.protobuf.Empty
+	12, // 20: grpc_server.URLShortenerService.GetToken:output_type -> grpc_server.GetTokenResponse
+	12, // [12:21] is the sub-list for method output_type
+	3,  // [3:12] is the sub-list for method input_type
 	3,  // [3:3] is the sub-list for extension type_name
 	3,  // [3:3] is the sub-list for extension extendee
 	0,  // [0:3] is the sub-list for field type_name
@@ -806,7 +856,7 @@ func file_grpc_server_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_grpc_server_proto_rawDesc), len(file_grpc_server_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   14,
+			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

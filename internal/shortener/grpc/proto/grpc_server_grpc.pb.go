@@ -28,6 +28,7 @@ const (
 	URLShortenerService_DeleteURLs_FullMethodName     = "/grpc_server.URLShortenerService/DeleteURLs"
 	URLShortenerService_Stats_FullMethodName          = "/grpc_server.URLShortenerService/Stats"
 	URLShortenerService_PingDB_FullMethodName         = "/grpc_server.URLShortenerService/PingDB"
+	URLShortenerService_GetToken_FullMethodName       = "/grpc_server.URLShortenerService/GetToken"
 )
 
 // URLShortenerServiceClient is the client API for URLShortenerService service.
@@ -42,6 +43,7 @@ type URLShortenerServiceClient interface {
 	DeleteURLs(ctx context.Context, in *DeleteURLsRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	Stats(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetStatsResponse, error)
 	PingDB(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	GetToken(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetTokenResponse, error)
 }
 
 type uRLShortenerServiceClient struct {
@@ -132,6 +134,16 @@ func (c *uRLShortenerServiceClient) PingDB(ctx context.Context, in *emptypb.Empt
 	return out, nil
 }
 
+func (c *uRLShortenerServiceClient) GetToken(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetTokenResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetTokenResponse)
+	err := c.cc.Invoke(ctx, URLShortenerService_GetToken_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // URLShortenerServiceServer is the server API for URLShortenerService service.
 // All implementations must embed UnimplementedURLShortenerServiceServer
 // for forward compatibility.
@@ -144,6 +156,7 @@ type URLShortenerServiceServer interface {
 	DeleteURLs(context.Context, *DeleteURLsRequest) (*emptypb.Empty, error)
 	Stats(context.Context, *emptypb.Empty) (*GetStatsResponse, error)
 	PingDB(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
+	GetToken(context.Context, *emptypb.Empty) (*GetTokenResponse, error)
 	mustEmbedUnimplementedURLShortenerServiceServer()
 }
 
@@ -177,6 +190,9 @@ func (UnimplementedURLShortenerServiceServer) Stats(context.Context, *emptypb.Em
 }
 func (UnimplementedURLShortenerServiceServer) PingDB(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method PingDB not implemented")
+}
+func (UnimplementedURLShortenerServiceServer) GetToken(context.Context, *emptypb.Empty) (*GetTokenResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetToken not implemented")
 }
 func (UnimplementedURLShortenerServiceServer) mustEmbedUnimplementedURLShortenerServiceServer() {}
 func (UnimplementedURLShortenerServiceServer) testEmbeddedByValue()                             {}
@@ -343,6 +359,24 @@ func _URLShortenerService_PingDB_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _URLShortenerService_GetToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(URLShortenerServiceServer).GetToken(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: URLShortenerService_GetToken_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(URLShortenerServiceServer).GetToken(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // URLShortenerService_ServiceDesc is the grpc.ServiceDesc for URLShortenerService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -381,6 +415,10 @@ var URLShortenerService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "PingDB",
 			Handler:    _URLShortenerService_PingDB_Handler,
+		},
+		{
+			MethodName: "GetToken",
+			Handler:    _URLShortenerService_GetToken_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

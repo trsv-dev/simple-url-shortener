@@ -9,8 +9,8 @@ import (
 )
 
 // PingDB При gRPC запросе (GET) к "/ping" проверяет соединение с базой данных
-func (s *GRPCHandler) PingDB(ctx context.Context, in *emptypb.Empty) (*emptypb.Empty, error) {
-	if err := s.Storage.Ping(ctx); err != nil {
+func (g *GRPCHandler) PingDB(ctx context.Context, in *emptypb.Empty) (*emptypb.Empty, error) {
+	if err := g.Storage.Ping(ctx); err != nil {
 		//w.WriteHeader(http.StatusInternalServerError)
 		return nil, status.Error(codes.Internal, err.Error())
 	}

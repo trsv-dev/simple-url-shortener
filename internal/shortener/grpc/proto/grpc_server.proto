@@ -68,6 +68,10 @@ message GetStatsResponse {
   uint32 urls_amount = 2;
 }
 
+message GetTokenResponse {
+  string token = 1;
+}
+
 service URLShortenerService {
   rpc Post(PostRequest) returns (PostResponse) {};
   rpc Shorten(ShortenRequest) returns (ShortenResponse) {};
@@ -77,4 +81,5 @@ service URLShortenerService {
   rpc DeleteURLs(DeleteURLsRequest) returns (google.protobuf.Empty) {};
   rpc Stats(google.protobuf.Empty) returns (GetStatsResponse) {};
   rpc PingDB(google.protobuf.Empty) returns (google.protobuf.Empty) {};
+  rpc GetToken(google.protobuf.Empty) returns (GetTokenResponse) {}
 }

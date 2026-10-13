@@ -20,7 +20,7 @@ import (
 // Доступ только из доверенной подсети, задающейся через переменную окружения TRUSTED_SUBNET или флаг -t,
 // например, 127.0.0.0/8 или -t 192.168.1.0/24.
 // При пустом значении доступ запрещён для любого входящего запроса.
-func (s *GRPCHandler) Stats(ctx context.Context, in *emptypb.Empty) (*pb.GetStatsResponse, error) {
+func (g *GRPCHandler) Stats(ctx context.Context, in *emptypb.Empty) (*pb.GetStatsResponse, error) {
 	// из конфига сервера получаем доверенные маски подсети
 	trustedSubnet := config.GetServerConfig().TrustedSubnet
 	if trustedSubnet == "" {
@@ -58,12 +58,12 @@ func (s *GRPCHandler) Stats(ctx context.Context, in *emptypb.Empty) (*pb.GetStat
 		return nil, status.Error(codes.PermissionDenied, "доступ запрещён")
 	}
 
-	urlsStat, err := s.Storage.GetURLsStat(ctx)
+	urlsStat, err := g.Storage.GetURLsStat(ctx)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	usersStat, err := s.Storage.GetUsersStat(ctx)
+	usersStat, err := g.Storage.GetUsersStat(ctx)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}

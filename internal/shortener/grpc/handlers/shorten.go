@@ -13,9 +13,9 @@ import (
 )
 
 // Shorten Функция обработки gRPC запроса (POST) к "/api/shorten"
-func (s *GRPCHandler) Shorten(ctx context.Context, in *pb.ShortenRequest) (*pb.ShortenResponse, error) {
+func (g *GRPCHandler) Shorten(ctx context.Context, in *pb.ShortenRequest) (*pb.ShortenResponse, error) {
 	baseURL := config.GetServerConfig().BaseURL
-	shortURL, err := s.Storage.SetInStorage(ctx, in.OriginalUrl)
+	shortURL, err := g.Storage.SetInStorage(ctx, in.OriginalUrl)
 	var conflictErr *errs.ErrLongURLConflict
 	if err != nil {
 		switch {
