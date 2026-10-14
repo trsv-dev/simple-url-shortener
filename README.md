@@ -13,13 +13,13 @@
 - 🔄 Восстановление оригинальных URL
 - 👤 Авторизация и сессии через cookie
 - 🌐 HTTP API и gRPC API
-- 🎛️ Независимый запуск gRPC-сервера с настройкой порта
+- 🎛️ Независимый запуск HTTP сервера и gRPC сервера с настройкой порта
 - 🧠 Три варианта хранения - в оперативной памяти, файле и PostgreSQL
 - 💥 Проверка сгенерированных коротких URL на коллизии
 - ⬅️ Удаление пользовательских ссылок
 - ⚙️ Конфигурация через флаги и переменные окружения
 - 📉 Поддержка GZIP-сжатия
-- 📋 Логгирование событий с задаваемым уровнем
+- 📋 Логирование событий с задаваемым уровнем
 - 🧪 Покрытие бизнес-логики тестами
 
 ---
@@ -133,14 +133,14 @@ go run cmd/shortener/main.go
 ### 🔧 Пример запуска через скомпилированный бинарник с флагами:
 
 ```bash
-# Запуск с БД
+# Запуск с БД и только HTTP сервером
 ./shortener -l=true -ll Debug -e 12h -k UIfuBer431qY1 -d 'host=localhost port=5432 user=username password=user_password dbname=user_dbname sslmode=disable' -t 192.168.1.0/24
-# Запуск с файловым хранилищем
+# Запуск с файловым хранилищем и только HTTP сервером
 ./shortener -l=true -ll Debug -e 12h -k UIfuBer431qY1 -f "/tmp/short-url-storage-filedb.json" -t 192.168.1.0/24
-# Запуск с хранилищем в памяти
+# Запуск с хранилищем в памяти и только HTTP сервером
 ./shortener -l=true -ll Debug -e 12h -k UIfuBer431qY1 -f "" -t 192.168.1.0/24
-# Запуск с БД и gRPC сервером
-./shortener -l=true -ll Debug -e 12h -k UIfuBer431qY1 -d 'host=localhost port=5432 user=username password=user_password dbname=user_dbname sslmode=disable' -t 192.168.1.0/24 -g=true -gp=9999
+# Запуск с БД и только gRPC сервером
+./shortener -l=true -ll Debug -e 12h -k UIfuBer431qY1 -d 'host=localhost port=5432 user=username password=user_password dbname=user_dbname sslmode=disable' -t 192.168.1.0/24 -grpc=true -gp=9999 -http=false
 ```
 
 Описание флагов:
@@ -156,8 +156,9 @@ go run cmd/shortener/main.go
 -ll Выбор уровня логгирования (по умолчанию Info, возможные варианты - Debug, Info, Warn, Error, DPanic, Panic, Fatal)
 -f JSON-файл с параметрами конфигурации
 -t Доверенная подсеть (CIDR)
--g Включение gRPC сервера (по умолчанию false)
+-grpc Включение gRPC сервера (по умолчанию false)
 -gp Порт gRPC сервера (по умолчанию 9999)
+-http Включение HTTP сервера (по умолчанию true)
 ```
 
 ---

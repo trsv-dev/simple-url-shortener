@@ -53,6 +53,8 @@ func RunServer(ctx context.Context, serverAddress string, enableHTTPS bool, appH
 	go func() {
 		var err error
 
+		logger.Log.Info("Сервер HTTP запущен", zap.String("address", serverAddress))
+
 		if enableHTTPS {
 			err = server.ListenAndServeTLS("", "")
 		} else {
@@ -60,7 +62,7 @@ func RunServer(ctx context.Context, serverAddress string, enableHTTPS bool, appH
 		}
 
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logger.Log.Error("Ошибка запуска сервера", zap.Error(err))
+			logger.Log.Error("Ошибка запуска HTTP сервера", zap.Error(err))
 		}
 	}()
 
@@ -69,12 +71,13 @@ func RunServer(ctx context.Context, serverAddress string, enableHTTPS bool, appH
 	// канал остается пустым, пока контекст не передаст в него сигнал завершения работы
 	<-ctx.Done()
 
+	logger.Log.Info("Остановка HTTP сервера")
 	err = server.Shutdown(ctx)
 	if err != nil {
-		logger.Log.Error("Ошибка остановки сервера", zap.Error(err))
+		logger.Log.Error("Ошибка остановки HTTP сервера", zap.Error(err))
 		return err
 	}
 
-	logger.Log.Info("Сервер остановлен")
+	logger.Log.Info("Сервер HTTP остановлен")
 	return nil
 }
