@@ -34,7 +34,7 @@ func RunGRPCServer(ctx context.Context, grpcHandler *srv.GRPCHandler) error {
 	pb.RegisterURLShortenerServiceServer(server, grpcHandler)
 
 	go func() {
-		logger.Log.Info("gRPC сервер запущен", zap.String("address", grpcAddress))
+		logger.Log.Info("Сервер gRPC запущен", zap.String("address", grpcAddress))
 
 		if SrvErr := server.Serve(lis); err != nil {
 			logger.Log.Error("Ошибка запуска gRPC сервера", zap.Error(SrvErr))
@@ -47,7 +47,7 @@ func RunGRPCServer(ctx context.Context, grpcHandler *srv.GRPCHandler) error {
 
 	server.GracefulStop()
 
-	logger.Log.Info("Сервер gRPC сервер остановлен")
+	logger.Log.Info("Сервер gRPC остановлен")
 
 	return nil
 }

@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -82,7 +83,7 @@ func main() {
 	URLStorage := storage.SelectStorage(cfg)
 
 	// откладываем закрытие БД через метод Close(), полученный из хранилища, на момент
-	// когда RunServer() вернет управление по той или иной причине
+	// когда запущенные сервера (HTTP и/или gRPC) вернут управление по той или иной причине
 	defer func() {
 		if URLStorage != nil {
 			if err := URLStorage.Close(); err != nil {
@@ -94,14 +95,18 @@ func main() {
 	}()
 
 	logger.Log.Info("Сервер запущен",
-		zap.String("address", cfg.ServerAddress),
 		zap.String("log_level", cfg.LogLevel),
 	)
 
-	appHandler := handlers.NewAppHandler(URLStorage, cfg.SecretKey, cfg.TokenExp)
+	if !cfg.StartHTTP && !cfg.StartGRPC {
+		logger.Log.Error("Ни один сервер (HTTP или gRPC) не был включен в настройках. Завершение работы")
+		return
+	}
 
 	// запускаем горутину, которая через временные промежутки делает удаление помеченных (is_delete=True) URL
 	go func() {
+		logger.Log.Info("Процесс фонового удаления URL запущен")
+
 		ticker := time.NewTicker(3 * time.Minute)
 		defer ticker.Stop()
 
@@ -114,30 +119,46 @@ func main() {
 				}
 
 			case <-ctx.Done():
-				logger.Log.Info("Горутина для фонового удаления URL завершена")
+				logger.Log.Info("Процесс фонового удаления URL завершен")
 				return
 			}
 		}
 	}()
 
+	// WaitGroup для работы серверов и ожидания завершения их работы
+	serversWG := sync.WaitGroup{}
+
+	// если разрешен запуск HTTP сервера - конфигурируем и запускаем его
+	if cfg.StartHTTP {
+		// и запускаем в WaitGroup
+		serversWG.Go(func() {
+			appHandler := handlers.NewAppHandler(URLStorage, cfg.SecretKey, cfg.TokenExp)
+
+			err := server.RunServer(ctx, cfg.ServerAddress, cfg.EnableHTTPS, appHandler)
+			if err != nil {
+				logger.Log.Error("Ошибка HTTP сервера", zap.Error(err))
+			}
+		})
+	}
+
 	// если разрешен запуск gRPC сервера - конфигурируем и запускаем его
-	if cfg.EnableGRPC {
-		grpcConfig := grpc_handlers.GRPCConfig{
-			ServerAddress: cfg.ServerAddress,
-			GRPCPort:      cfg.GRPCPort,
-			SecretKey:     cfg.SecretKey,
-			TokenExp:      cfg.TokenExp,
-		}
+	if cfg.StartGRPC {
+		// и запускаем в WaitGroup
+		serversWG.Go(func() {
+			grpcConfig := grpc_handlers.GRPCConfig{
+				ServerAddress: cfg.ServerAddress,
+				GRPCPort:      cfg.GRPCPort,
+				SecretKey:     cfg.SecretKey,
+				TokenExp:      cfg.TokenExp,
+			}
 
-		grpcHandler := grpc_handlers.NewGRPCHandler(URLStorage, grpcConfig)
+			grpcHandler := grpc_handlers.NewGRPCHandler(URLStorage, grpcConfig)
 
-		if err := grpcserver.RunGRPCServer(ctx, grpcHandler); err != nil {
-			logger.Log.Error("Ошибка gRPC сервера", zap.Error(err))
-		}
+			if err := grpcserver.RunGRPCServer(ctx, grpcHandler); err != nil {
+				logger.Log.Error("Ошибка gRPC сервера", zap.Error(err))
+			}
+		})
 	}
 
-	err := server.RunServer(ctx, cfg.ServerAddress, cfg.EnableHTTPS, appHandler)
-	if err != nil {
-		panic(err)
-	}
+	serversWG.Wait()
 }

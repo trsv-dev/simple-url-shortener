@@ -30,26 +30,26 @@ func AuthInterceptor(secretKey string) grpc.UnaryServerInterceptor {
 		if !ok {
 			return nil, status.Error(
 				codes.Unauthenticated,
-				"отсутствуют метаданные аутентификации",
+				"Отсутствуют метаданные аутентификации",
 			)
 		}
 
 		// ищем заголовок authorization
 		values := md.Get("authorization")
 		if len(values) == 0 {
-			return nil, status.Error(codes.Unauthenticated, "отсутствует хедер авторизации")
+			return nil, status.Error(codes.Unauthenticated, "Отсутствует хедер авторизации")
 		}
 
 		// ожидаемый формат: Bearer <JWT>
 		parts := strings.Fields(values[0])
 		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-			return nil, status.Error(codes.Unauthenticated, "неверный хедер авторизации")
+			return nil, status.Error(codes.Unauthenticated, "Неверный хедер авторизации")
 		}
 
 		// используем существующую проверку JWT
 		userID, err := auth.GetUserID(parts[1], secretKey)
 		if err != nil || userID == "" {
-			return nil, status.Error(codes.Unauthenticated, "невалидный токен")
+			return nil, status.Error(codes.Unauthenticated, "Невалидный токен")
 		}
 
 		// кладём userID в контекст, как в HTTP middleware
